@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ThinCap 140 · Алекс С. Аудит</title>
+<style>
+/*@@FONTS@@*/
+/* ===== Brand Guide v2.2 · цифровий канал ===== */
+:root{
+  --p900:#003D23; --p700:#006B3C; --p600:#00854B; --p500:#00A35C; --p400:#2EBD7A; --p100:#D4F7E5; --p50:#EDFCF4;
+  --n950:#0C1118; --n900:#141B26; --n800:#1E293B; --n700:#334155; --n600:#475569; --n500:#64748B; --n400:#94A3B8; --n300:#CBD5E1; --n200:#E2E8F0; --n100:#F1F5F9; --n50:#F8FAFC;
+  --font-display:"Playfair Display","Times New Roman",Georgia,serif;
+  --font-sans:"Manrope","Segoe UI","Helvetica Neue",Arial,sans-serif;
+  --font-mono:"JetBrains Mono","Manrope",Consolas,monospace;
+  --radius-sm:6px; --radius-md:10px; --radius-lg:14px;
+
+  --bg:#FFFFFF; --surface:#FFFFFF; --surface-2:var(--n50); --head:var(--n100); --border:var(--n200); --control:var(--n500);
+  --text:var(--n900); --text-2:var(--n700); --muted:var(--n600);
+  --accent:var(--p600); --accent-hover:var(--p700); --accent-text:var(--p700); --on-accent:#FFFFFF; --tint:var(--p50);
+  --ok-bg:var(--p50); --ok-tx:var(--p700); --ok-bd:var(--p600);
+  --warn-bg:#FEF3C7; --warn-tx:#B45309; --warn-bd:#D97706;
+  --err-bg:#FEE2E2; --err-tx:#B91C1C; --err-bd:#DC2626;
+  --info-bg:#DBEAFE; --info-tx:#1D4ED8; --info-bd:#2563EB;
+  --logo-fill:#00854B; --input:#FFFFFF; --cur:var(--p50);
+  --gold-bg:#F5E6B8; --gold-bg-h:#EDD89A; --gold-bd:#8A6D1E; --gold-tx:#7A6019;
+  --tab-bg:var(--n100); --tab-bd:var(--n300);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:var(--n950); --surface:var(--n900); --surface-2:#18212E; --head:var(--n800); --border:var(--n800); --control:var(--n500);
+    --text:var(--n100); --text-2:var(--n300); --muted:var(--n400);
+    --accent:var(--p500); --accent-hover:var(--p400); --accent-text:var(--p400); --on-accent:var(--n950); --tint:#0F2A1D;
+    --ok-bg:#0F2A1D; --ok-tx:var(--p400); --ok-bd:var(--p500);
+    --warn-bg:#2E2208; --warn-tx:#FBBF24; --warn-bd:#D97706;
+    --err-bg:#3A1414; --err-tx:#FCA5A5; --err-bd:#DC2626;
+    --info-bg:#132447; --info-tx:#93C5FD; --info-bd:#2563EB;
+    --logo-fill:#FFFFFF; --input:var(--n950); --cur:#0F2A1D;
+    --gold-bg:#3A2F12; --gold-bg-h:#4A3C17; --gold-bd:#C49B2A; --gold-tx:#F5E6B8;
+    --tab-bg:var(--n800); --tab-bd:var(--n700);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:var(--n950); --surface:var(--n900); --surface-2:#18212E; --head:var(--n800); --border:var(--n800); --control:var(--n500);
+  --text:var(--n100); --text-2:var(--n300); --muted:var(--n400);
+  --accent:var(--p500); --accent-hover:var(--p400); --accent-text:var(--p400); --on-accent:var(--n950); --tint:#0F2A1D;
+  --ok-bg:#0F2A1D; --ok-tx:var(--p400); --ok-bd:var(--p500);
+  --warn-bg:#2E2208; --warn-tx:#FBBF24; --warn-bd:#D97706;
+  --err-bg:#3A1414; --err-tx:#FCA5A5; --err-bd:#DC2626;
+  --info-bg:#132447; --info-tx:#93C5FD; --info-bd:#2563EB;
+  --logo-fill:#FFFFFF; --input:var(--n950); --cur:#0F2A1D;
+  --gold-bg:#3A2F12; --gold-bg-h:#4A3C17; --gold-bd:#C49B2A; --gold-tx:#F5E6B8;
+  --tab-bg:var(--n800); --tab-bd:var(--n700);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:400 14px/1.55 var(--font-sans);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:0 16px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---- Шапка: логотип + найменування Entity + lockup продукту ---- */
+header.app{background:var(--surface);border-bottom:1px solid var(--border)}
+.brandbar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:14px 0 10px}
+.brandbar .logo{height:40px;width:auto;display:block;flex:none}
+.brandbar .logo .st0{fill:var(--logo-fill)}
+.entity{font:600 13px/1.3 var(--font-sans);color:var(--text-2);padding-right:16px;border-right:1px solid var(--border)}
+.entity small{display:block;font-weight:400;font-size:12px;color:var(--muted)}
+.lockup{display:flex;flex-direction:column}
+.lockup .name{font:700 20px/1.2 var(--font-sans);color:var(--text);letter-spacing:-.01em}
+.lockup .name span{font-weight:300;color:var(--accent-text)}
+.lockup .desc{font-size:12px;color:var(--muted)}
+h1.page{font:700 24px/1.25 var(--font-display);letter-spacing:-.01em;margin:6px 0 2px;color:var(--text)}
+.sub{color:var(--muted);font-size:13px;margin:0 0 10px}
+/* Закладки розділів: активна — заливка Primary 600, білий текст (4,71:1); смуга з'єднує її з вмістом */
+nav.tabs{display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;border-bottom:3px solid var(--accent);margin-top:4px}
+nav.tabs button{font:600 14px var(--font-sans);background:var(--tab-bg);color:var(--text-2);border:1px solid var(--tab-bd);border-bottom:0;
+  padding:11px 18px;min-height:44px;cursor:pointer;border-radius:var(--radius-md) var(--radius-md) 0 0;transition:background .15s,color .15s}
+nav.tabs button:hover{background:var(--tint);color:var(--accent-text);border-color:var(--accent)}
+nav.tabs button[aria-selected="true"]{background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:700;
+  padding-top:13px;box-shadow:0 -2px 8px rgba(0,61,35,.18)}
+nav.tabs button[aria-selected="true"]:hover{background:var(--accent-hover);color:var(--on-accent)}
+nav.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (max-width:520px){ nav.tabs button{flex:1 1 calc(50% - 6px);padding:10px 8px;font-size:13px} }
+
+/* ---- Кнопки (розд. 13) ---- */
+.btn{font:600 14px/1 var(--font-sans);display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:8px 16px;border-radius:var(--radius-sm);cursor:pointer;
+  border:1px solid var(--n300);background:var(--surface);color:var(--text-2)}
+.btn:hover{background:var(--n100)}
+:root[data-theme="dark"] .btn:hover{background:var(--n800)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .btn:hover{background:var(--n800)}}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+.btn.ghost{border-color:transparent;background:none;color:var(--accent-text)}
+/* Жовті кнопки роботи з файлом завдання — функціональний акцент Gold (Brand Guide, розд. 06–07) */
+.btn.gold{background:var(--gold-bg);border-color:var(--gold-bd);color:var(--gold-tx)}
+.btn.gold:hover{background:var(--gold-bg-h)}
+.btn.ghost:hover{background:var(--tint)}
+.btn.icon{min-width:44px;padding:8px}
+.recalc-msg{font-size:13px;color:var(--ok-tx)}
+.recalc-msg:empty{display:none}
+@keyframes flash{from{box-shadow:0 0 0 3px var(--accent)}to{box-shadow:0 0 0 0 transparent}}
+.flash{animation:flash 1.2s ease-out}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
+
+main{padding:4px 0 48px}
+section.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:18px 20px;margin:14px 0}
+section.card h2{font:700 20px/1.3 var(--font-display);margin:0 0 10px;color:var(--text)}
+section.card h3{font:600 16px/1.35 var(--font-sans);margin:16px 0 8px}
+.lead{color:var(--muted);font-size:13px;margin:-2px 0 12px}
+
+/* ---- Поля ---- */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px 16px}
+label.f{display:flex;flex-direction:column;gap:4px;font:600 13px/1.4 var(--font-sans);color:var(--text-2);min-width:0}
+.src{font:400 11px/1.4 var(--font-sans);color:var(--muted)}
+input,select,textarea{font:400 14px var(--font-sans);color:var(--text);background:var(--input);border:1px solid var(--control);border-radius:var(--radius-sm);padding:8px 10px;width:100%;min-width:0;min-height:40px}
+input.num{font:400 13px var(--font-mono);text-align:right;font-variant-numeric:tabular-nums}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+label.chk{display:flex;gap:10px;align-items:flex-start;font-size:14px}
+label.chk input{width:18px;min-height:18px;height:18px;margin-top:3px;accent-color:var(--p600);flex:none}
+.out{font:500 15px/1.3 var(--font-mono);font-variant-numeric:tabular-nums;color:var(--text);padding:9px 10px;border-radius:var(--radius-sm);background:var(--surface-2);border:1px dashed var(--border);text-align:right;min-height:40px}
+
+/* ---- Реєстр боргів: картки без горизонтальної прокрутки ---- */
+.debts{display:flex;flex-direction:column;gap:10px}
+.debt{border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:var(--radius-sm);padding:12px;background:var(--surface-2)}
+.debt .row1{display:grid;grid-template-columns:28px minmax(0,2fr) minmax(0,1.3fr) minmax(0,1.7fr) 44px;gap:10px;align-items:end}
+.debt .row2{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-top:10px;padding-left:38px}
+.debt .no{font:600 13px var(--font-mono);color:var(--muted);align-self:center;padding-top:18px}
+.sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin:12px 0}
+@media (max-width:900px){
+  .debt .row1{grid-template-columns:28px minmax(0,1fr) minmax(0,1fr) 44px}
+  .debt .row1 .cat{grid-column:2 / 4}
+  .debt .row2{grid-template-columns:repeat(2,minmax(0,1fr));padding-left:0}
+  .debt .row2 .avg{grid-column:1 / -1}
+}
+@media (max-width:520px){
+  .debt .row1{grid-template-columns:minmax(0,1fr) 44px}
+  .debt .row1 .no{display:none}
+  .debt .row1 .cat,.debt .row1 .acc{grid-column:1 / 2}
+  .debt .row1 .del{grid-row:1;grid-column:2}
+  .debt .row2{grid-template-columns:minmax(0,1fr)}
+}
+
+/* ---- Таблиці (розд. 13) ---- */
+.tbl-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid var(--border);padding:7px 9px;vertical-align:top;text-align:left}
+th{background:var(--head);font:600 12px/1.35 var(--font-sans);color:var(--text-2)}
+tbody tr:nth-child(even) td{background:var(--surface-2)}
+td.n,th.n{text-align:right;white-space:nowrap}
+td.n{font:400 12.5px/1.45 var(--font-mono);font-variant-numeric:tabular-nums}
+td.c,th.c{text-align:center}
+td input.num{min-width:0}
+#poolTbl td input{min-width:0}
+#poolTbl{table-layout:fixed}
+#poolTbl .note-in{margin-top:6px;font-size:12px;min-height:32px;padding:5px 8px}
+#poolTbl th:first-child{width:84px} #poolTbl th:last-child{width:64px}
+#poolTbl th{white-space:normal}
+@media (max-width:900px){ #poolTbl{table-layout:auto} #poolTbl td input.num{min-width:120px} }
+tr.cur td{background:var(--cur)!important}
+tr.total td,tr.total th{font-weight:700;background:var(--head)}
+.muted{color:var(--muted)}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.formula{font:400 12px/1.45 var(--font-mono);color:var(--muted)}
+
+/* ---- Показники і статуси ---- */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+.kpi{border:1px solid var(--border);border-radius:var(--radius-md);padding:12px 14px;background:var(--surface-2)}
+.kpi.key{border-top:3px solid var(--accent)}
+.kpi .lbl{font:600 11px/1.4 var(--font-sans);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.kpi .res{font:500 20px/1.3 var(--font-mono);font-variant-numeric:tabular-nums;margin-top:4px}
+.badge{display:inline-block;padding:2px 10px;border-radius:999px;font:700 12px/1.6 var(--font-sans)}
+.b-ok{background:var(--ok-bg);color:var(--ok-tx)} .b-warn{background:var(--warn-bg);color:var(--warn-tx)} .b-err{background:var(--err-bg);color:var(--err-tx)} .b-info{background:var(--info-bg);color:var(--info-tx)}
+ul.checks{list-style:none;padding:0;margin:0}
+ul.checks li{display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:start;padding:8px 12px;border-radius:var(--radius-sm);margin:6px 0;border-left:4px solid}
+ul.checks li .tag{font:700 11px/1.8 var(--font-sans);letter-spacing:.08em;text-transform:uppercase}
+ul.checks li.ok{background:var(--ok-bg);border-color:var(--ok-bd)} ul.checks li.ok .tag{color:var(--ok-tx)}
+ul.checks li.warn{background:var(--warn-bg);border-color:var(--warn-bd)} ul.checks li.warn .tag{color:var(--warn-tx)}
+ul.checks li.err{background:var(--err-bg);border-color:var(--err-bd)} ul.checks li.err .tag{color:var(--err-tx)}
+@media (max-width:520px){ ul.checks li{grid-template-columns:1fr;gap:2px} }
+.note-info{background:var(--info-bg);color:var(--text);border-left:4px solid var(--info-bd);padding:10px 12px;border-radius:var(--radius-sm);font-size:13px}
+.hidden{display:none!important}
+details summary{cursor:pointer;color:var(--accent-text);font-weight:600;min-height:32px}
+.findings li{margin:8px 0}
+.period-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+footer.app{border-top:1px solid var(--border);color:var(--muted);font-size:11px;padding:14px 0 24px}
+
+/* ===== Друк робочого документа · гібридний канал, бланк АСА (розд. 11) ===== */
+#printArea{display:none}
+@page{size:A4;margin:25.4mm 25.4mm 22mm 25.4mm;
+  @bottom-right{content:"Сторінка " counter(page) " з " counter(pages);font:400 7.5pt "Manrope",Arial,sans-serif;color:#334155;
+    vertical-align:top;padding-top:2mm;border-top:0.75pt solid #00854B;width:100%}
+}
+@page :first{margin-top:12.7mm;margin-bottom:32mm;
+  @bottom-right{content:none;border:none}
+  @bottom-left{content:url("@@QR_ASA_SVG@@");vertical-align:top;text-align:left;border-top:0.75pt solid #00854B;width:100%;padding-top:2mm}
+}
+@media print{
+  body{background:#fff;color:#000}
+  body.wp > header, body.wp > .wrap, body.wp > footer{display:none!important}
+  body.wp #printArea{display:block}
+  body:not(.wp) nav.tabs, body:not(.wp) .toolbar, body:not(.wp) .noprint{display:none!important}
+  body:not(.wp) section.card{border:none;padding:0;margin:8px 0;break-inside:avoid}
+}
+#printArea{color:#141B26;background:#fff;font:400 10.5pt/1.45 var(--font-sans)}
+#printArea .lh{display:grid;grid-template-columns:46mm 1fr;align-items:center;column-gap:0}
+#printArea .lh svg{width:42mm;height:16mm;display:block}
+#printArea .lh svg .st0{fill:#00854B}
+#printArea .lh .nm{text-align:right;font:700 13pt/1.25 "Playfair Display",Georgia,serif;color:#00854B;margin-bottom:3pt}
+#printArea .lh .rq{text-align:right;font:400 7.5pt/1.35 "Manrope",Arial,sans-serif;color:#334155}
+#printArea .lh-line{border-top:0.75pt solid #00854B;margin-top:10pt;padding-top:4pt;display:flex;justify-content:space-between;align-items:baseline}
+#printArea .lh-line .ds{font:italic 400 9pt "Playfair Display",Georgia,serif;color:#006B3C}
+#printArea .lh-line .ws{font:700 7.5pt "Manrope",Arial,sans-serif;color:#006B3C}
+#printArea .body1{margin-top:12mm}
+#printArea h1{font:700 18pt/1.25 var(--font-display);margin:0 0 4pt;color:#003D23}
+#printArea h2{font:700 13pt/1.3 var(--font-display);margin:12pt 0 4pt;color:#141B26;break-after:avoid}
+#printArea h3{font:600 11pt/1.35 var(--font-sans);margin:8pt 0 3pt;break-after:avoid}
+#printArea table{border-collapse:collapse;width:100%;margin:2pt 0 6pt;break-inside:auto}
+#printArea th,#printArea td{border:0.5pt solid #CBD5E1;padding:2.5pt 4pt;font:400 8.5pt/1.35 var(--font-sans);color:#141B26;background:#fff;text-align:left;vertical-align:top}
+#printArea th{background:#F1F5F9;font-weight:600}
+#printArea td.n,#printArea th.n{text-align:right;white-space:nowrap}
+#printArea td.n{font:400 8.5pt/1.35 var(--font-mono)}
+#printArea td.formula{font:400 7.5pt/1.35 var(--font-mono);color:#475569}
+#printArea tr{break-inside:avoid}
+#printArea .meta td{border:none;padding:1pt 4pt 1pt 0;font-size:9pt}
+#printArea .meta td:first-child{color:#475569;width:34mm}
+#printArea .res td{font-weight:700;background:#EDFCF4}
+#printArea .res td.n{font-weight:700}
+#printArea ul{margin:2pt 0;padding-left:0;list-style:none}
+#printArea ul li{display:grid;grid-template-columns:30mm 1fr;gap:3mm;margin:3pt 0;font-size:9pt;break-inside:avoid}
+#printArea ul li .tag{font:700 7.5pt/1.6 var(--font-sans);letter-spacing:.06em;text-transform:uppercase}
+#printArea ul li[data-lvl="ok"] .tag{color:#006B3C} #printArea ul li[data-lvl="warn"] .tag{color:#B45309} #printArea ul li[data-lvl="err"] .tag{color:#B91C1C}
+#printArea .sig{display:grid;grid-template-columns:1fr 1fr;gap:12mm;margin-top:14mm;break-inside:avoid}
+#printArea .sig div{border-top:0.75pt solid #141B26;padding-top:3pt;font-size:9pt}
+#printArea .small{font-size:8pt;color:#475569}
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="wrap">
+    <div class="brandbar">
+      @@LOGO@@
+      <div class="entity">ТОВ АФ «Алекс С. Аудит»<small>Аудит · Облік · Консалтинг</small></div>
+      <div class="lockup"><div class="name">ThinCap <span>140</span></div><div class="desc">Інструмент підтримки професійного судження</div></div>
+    </div>
+    <h1 class="page">Різниці за борговими зобов'язаннями з нерезидентами</h1>
+    <p class="sub">Розрахунок за п. 140.2–140.3 ст. 140 ПКУ (редакція з 01.01.2021) · рядки 3.1.1 / 3.2.1 Додатка РІ</p>
+    <nav class="tabs" role="tablist" id="tabs">
+      <button data-tab="calc" aria-selected="true">Розрахунок періоду</button>
+      <button data-tab="pool" aria-selected="false">Перенесення (п. 140.3)</button>
+      <button data-tab="params" aria-selected="false">Параметри та метод</button>
+      <button data-tab="notes" aria-selected="false">Методика та перевірка</button>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="toolbar noprint">
+    <button class="btn primary" data-wp="cur">🖨 Друк робочого документа</button>
+    <button class="btn" data-wp="all">Друк: усі періоди</button>
+    <button class="btn" id="btnXlsx">Експорт у Excel</button>
+    <button class="btn gold" id="btnSave">Зберегти JSON</button>
+    <label class="btn gold" for="fileLoad" tabindex="0">Завантажити JSON</label><input type="file" id="fileLoad" accept=".json,application/json" class="hidden">
+    <button class="btn ghost" id="btnPrint">Друк екрана</button>
+    <button class="btn ghost" id="btnExample">Завантажити приклад</button>
+    <button class="btn ghost" id="btnNew">Новий розрахунок</button>
+  </div>
+  <main>
+    <!-- ============ CALC ============ -->
+    <div class="tab" id="tab-calc">
+      <section class="card">
+        <div class="period-bar" id="periodBar"></div>
+        <p class="lead" id="periodHint" style="margin:10px 0 0"></p>
+      </section>
+
+      <section class="card">
+        <h2>1. Реєстр боргових зобов'язань перед нерезидентами і тест «3,5 раза»</h2>
+        <p class="lead">Боргові зобов'язання за п. 140.1: кредити, позики, депозити, РЕПО, фінансовий лізинг та інші запозичення незалежно від їх оформлення, разом із нарахованими процентами. До тесту включаються <b>всі</b> нерезиденти, зокрема іноземні банки. Проценти перед іноземними банками і МФО з державною гарантією, а також суми, скориговані за ст. 39, з СП виключаються (абз. 7–8 п. 140.2).</p>
+        <div class="debts" id="debts"></div>
+        <div class="toolbar noprint" style="margin:10px 0 0;align-items:center">
+          <button class="btn" id="addDebt">+ Додати кредитора / договір</button>
+          <button class="btn primary" data-recalc>↻ Перерахувати</button>
+          <span class="recalc-msg" role="status" aria-live="polite"></span>
+        </div>
+        <div class="sum" id="debtSum"></div>
+        <div class="grid">
+          <label class="f">Власний капітал на початок періоду, грн<input class="num" data-p="eqOpen" inputmode="decimal"><span class="src">Ф1, р. 1495, гр. 3</span></label>
+          <label class="f">Власний капітал на кінець періоду, грн<input class="num" data-p="eqClose" inputmode="decimal"><span class="src">Ф1, р. 1495, гр. 4</span></label>
+        </div>
+        <div id="testOut" style="margin-top:12px"></div>
+      </section>
+
+      <section class="card">
+        <h2>2. Вихідні дані звітного періоду</h2>
+        <p class="lead">Наростаючим підсумком з початку року.</p>
+        <div class="grid">
+          <label class="f">СП: проценти, що підлягають обмеженню, грн<div class="out" id="spOut">—</div><span class="src">Σ процентів − ст. 39 − іноземні банки − МФО + частка амортизації капіталізованих</span></label>
+          <label class="f">Частка амортизації капіталізованих процентів, грн<input class="num" data-p="capAmort" inputmode="decimal"><span class="src">Абз. 5 п. 140.2; розрахунок за кожним кваліфікованим активом</span></label>
+          <label class="f">ФВ: фінансові витрати, грн<input class="num" data-p="fv" inputmode="decimal"><span class="src">Ф2, р. 2250 (усі фінансові витрати, не лише щодо нерезидентів)</span></label>
+          <label class="f">АВ: амортизація за даними податкової звітності, грн<input class="num" data-p="av" inputmode="decimal"><span class="src">Додаток РІ, рядок податкової амортизації (пп. 14.1.138 ПКУ)</span></label>
+          <label class="f">ФРО: фінансовий результат до оподаткування, грн<input class="num" data-p="fro" inputmode="decimal"><span class="src">Ф2, р. 2290 / (2295); збиток вводиться з мінусом</span></label>
+          <label class="f">Інші різниці, що збільшують ФРО, грн<input class="num" data-p="incOther" inputmode="decimal"><span class="src">Додаток РІ, усі, крім 3.1.1</span></label>
+          <label class="f">Інші різниці, що зменшують ФРО, грн<input class="num" data-p="decOther" inputmode="decimal"><span class="src">Додаток РІ, усі, крім 3.2.1 та збитків минулих років</span></label>
+        </div>
+        <label class="f" style="margin-top:12px">Джерела даних / примітка для робочого документа<textarea rows="2" data-p="note"></textarea></label>
+      </section>
+
+      <section class="card">
+        <h2 style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">3. Результат
+          <span class="toolbar noprint" style="margin:0"><button class="btn primary" data-recalc>↻ Перерахувати</button><button class="btn primary" data-wp="cur">🖨 Друк робочого документа</button></span></h2>
+        <p class="recalc-msg noprint" role="status" aria-live="polite" style="margin:-4px 0 10px"></p>
+        <div class="kpis" id="kpis"></div>
+        <h3>Хід розрахунку</h3>
+        <div class="tbl-wrap"><table id="traceTbl"><thead><tr><th class="c">№</th><th>Показник</th><th>Формула</th><th class="n">Сума, грн</th></tr></thead><tbody></tbody></table></div>
+      </section>
+
+      <section class="card">
+        <h2>4. Контрольні процедури</h2>
+        <ul class="checks" id="checks"></ul>
+      </section>
+    </div>
+
+    <!-- ============ POOL ============ -->
+    <div class="tab hidden" id="tab-pool">
+      <section class="card">
+        <h2>Пул процентів, перенесених на майбутні періоди</h2>
+        <p class="lead">Залишок на початок року = залишок на кінець попереднього року × (1 − 5 %). Протягом року зменшення за 3.2.1 списується з цього залишку, а нове перевищення за 3.1.1 додається в повній сумі. Модель відповідає консультації ДПС: неврахований залишок станом на 01.01 зменшується на 5 % і додається до процентів поточного року.</p>
+        <p class="lead" id="poolFirstNote"></p>
+        <div class="tbl-wrap"><table id="poolTbl">
+          <thead><tr><th>Рік</th><th class="n">Залишок на початок (після −5 %), грн</th><th class="n">3.1.1 Перевищення (+), грн</th><th class="n">3.2.1 Зменшення (−), грн</th><th class="n">Залишок на кінець, грн</th><th class="n">Контроль: за даними платника, грн</th><th class="n">Розбіжність, грн</th><th class="noprint"></th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+        <div class="toolbar noprint"><button class="btn" id="addYearFirst">+ Додати рік на початок</button><button class="btn" id="addYear">+ Додати рік у кінець</button></div>
+        <p class="lead" id="poolCurNote"></p>
+      </section>
+      <section class="card">
+        <details><summary>Розбивка залишку за роками виникнення (FIFO) — аудиторський слід</summary>
+          <div class="tbl-wrap" style="margin-top:8px"><table id="vintTbl"></table></div>
+        </details>
+      </section>
+    </div>
+
+    <!-- ============ PARAMS ============ -->
+    <div class="tab hidden" id="tab-params">
+      <section class="card">
+        <h2>Завдання і платник</h2>
+        <div class="grid">
+          <label class="f">Платник податку (клієнт)<input data-m="payer"></label>
+          <label class="f">Код ЄДРПОУ клієнта<input data-m="edrpou"></label>
+          <label class="f">Звітний рік<input class="num" data-m="year" inputmode="numeric"></label>
+          <label class="f">Індекс робочого документа<input data-m="wpIndex" placeholder="напр., Т-140/2026"></label>
+          <label class="f">Категорія платника<select data-m="kind">
+            <option value="general">Загальна (поріг 3,5)</option>
+            <option value="fin">Фінансова установа / виключно лізингова діяльність (п. 140.2 не застосовується)</option>
+          </select></label>
+          <label class="f">Редакція п. 140.2<select data-m="regime">
+            <option value="auto">Автоматично за звітним роком</option>
+            <option value="pre2021">До 01.01.2021: 50 % × (ФРО + ФВ + АВ), лише пов'язані нерезиденти</option>
+            <option value="y2021early">2021, ранній підхід ДПС: 0,3 × ООПП + ФВ + АВ</option>
+            <option value="current">З 01.01.2021 (позиція ДПС з 09.2021): 0,3 × (ООПП + ФВ + АВ)</option>
+          </select><span class="src">Для перевірки сум 3.1.1 / 3.2.1 минулих років, задекларованих за іншою редакцією</span></label>
+          <label class="f">Підготував<input data-m="preparer"></label>
+          <label class="f">Перевірив<input data-m="reviewer"></label>
+        </div>
+      </section>
+      <section class="card">
+        <h2>Методологічні налаштування</h2>
+        <label class="chk"><input type="checkbox" data-mm="includeDecInObject">
+          <span><b>Враховувати зменшення за п. 140.3 (3.2.1) в об'єкті оподаткування для ліміту 30 %.</b><br>
+          <span class="muted">За замовчуванням вимкнено. Консультація ДПС (ЦМУ ДПС по роботі з ВПП) описує механізм так: «не враховані відсотки станом на 01 січня поточного року зменшуються на 5 відс. та <i>додаються до суми відсотків, нарахованих на користь нерезидентів</i>». Отже, зменшення за п. 140.3 визначається в межах того самого розрахунку за п. 140.2 і не повинно входити в об'єкт оподаткування, від якого рахується ліміт. Якщо галочку ввімкнути, буде застосовано буквальне прочитання абз. 3 п. 140.2. Це консервативний варіант. Рівняння в ньому розв'язується аналітично: D = (0,3 · (ООПП₀ + ФВ + АВ) − СП) / 1,3.</span></span></label>
+        <label class="chk" style="margin-top:12px"><input type="checkbox" data-mm="decreaseWhenTestFails">
+          <span><b>Дозволяти зменшення за 3.2.1, коли тест «3,5 раза» не виконано.</b><br>
+          <span class="muted">П. 140.3 відсилає до «обмежень, встановлених п. 140.2». Тут дві позиції: (а) ліміт 30 % діє завжди, тобто зменшення можливе в межах ліміту; (б) якщо умова п. 140.2 не виконана, зменшення не виникає. За замовчуванням увімкнено (а). Позицію треба задокументувати.</span></span></label>
+        <div class="grid" style="margin-top:14px">
+          <label class="f">Ліміт від показника (п. 140.2)<input class="num" data-mm="cap"></label>
+          <label class="f">Щорічне зменшення перенесених процентів (п. 140.3)<input class="num" data-mm="haircut"></label>
+        </div>
+      </section>
+    </div>
+
+    <!-- ============ NOTES ============ -->
+    <div class="tab hidden" id="tab-notes">
+      <section class="card hidden" id="caseNotes"></section>
+      <section class="card">
+        <h2>Методичні примітки: типові помилки Excel-розрахунків за п. 140.2–140.3</h2>
+        <p class="lead">Перелік складено за результатами інспектування робочих документів. Він слугує чек-листом при перевірці розрахунку, підготовленого клієнтом.</p>
+        <ol class="findings">
+          <li><b>Порядок операцій у пулі перенесення.</b> Використану суму треба списувати з залишку того року, в якому її використано, і лише потім зменшувати решту на 5 %. Якщо списати після зменшення, 5 % буде нараховано й на використану суму, і залишок виявиться заниженим. Додаток веде пул однією сумою: оскільки зменшення однакове для всіх років, порядок списання на загальний залишок не впливає.</li>
+          <li><b>Зменшення за 3.2.1 без обмеження.</b> Зменшення має бути обмежене двома величинами: невикористаним лімітом 30 % і доступним залишком пулу.</li>
+          <li><b>Знаки при визначенні об'єкта оподаткування.</b> ООПП = ФРО + різниці РІ, крім збитків минулих років і різниць за 3.1.1 / 3.2.1. Помилки знаків часто непомітні, поки інші різниці ≈ 0.</li>
+          <li><b>Тест на пов'язаність (п. 14.1.159) замість тесту п. 140.2.</b> З 01.01.2021 обмеження діє щодо боргових зобов'язань перед <i>усіма</i> нерезидентами, а тест 3,5 раза рахується за сукупним боргом.</li>
+          <li><b>Залишок на початок року без зменшення на 5 %.</b> Неврахований залишок станом на 01.01 спочатку зменшується на 5 %, і лише потім порівнюється з лімітом (консультація ДПС).</li>
+          <li><b>Дублікати і жорсткі посилання.</b> Паралельні таблиці пулу і посилання на клітинку конкретного року з часом дають кілька різних «джерел правди» і ламаються при переході на наступний рік.</li>
+          <li><b>АВ за бухгалтерськими даними.</b> Норма вимагає амортизацію за даними <i>податкової</i> звітності.</li>
+          <li><b>Неповний реєстр боргів.</b> Потрібно охопити всі боргові зобов'язання за п. 140.1: кредити, позики, депозити, РЕПО, фінансовий лізинг, разом із нарахованими процентами, за всіма нерезидентами, зокрема іноземними банками.</li>
+          <li><b>ФВ лише щодо нерезидентів.</b> ФВ — це всі фінансові витрати за Ф2 (р. 2250, оборот рах. 95), зокрема перед резидентами. Курсові різниці до ФВ не входять (НП(С)БО 21).</li>
+          <li><b>Від'ємний власний капітал.</b> Якщо капітал ≤ 0 і борг є, умова п. 140.2 виконана. Це треба обробляти явно, а не покладатися на порівняння з від'ємним добутком.</li>
+          <li><b>Винятки з п. 140.2:</b> проценти, скориговані за ст. 39, проценти на користь іноземних банків і МФО з державною гарантією. Для фінансових установ і компаній, що займаються виключно лізингом, п. 140.2 не застосовується взагалі (поріг 10× у чинній редакції відсутній).</li>
+          <li><b>Принцип «витягнутої руки» (абз. 7 п. 140.2).</b> Застосовується за наслідками року; обмеження розраховується від ринкової частини процентів.</li>
+          <li><b>Аудиторський слід (МСА 230 / МСА 500).</b> Вхідні дані мають містити посилання на ОСВ, Ф1, Ф2, РІ, а залишок пулу має бути звірений з поданими деклараціями.</li>
+        </ol>
+      </section>
+    </div>
+  </main>
+</div>
+<footer class="app"><div class="wrap">ТОВ АФ «Алекс С. Аудит» · Код ЄДРПОУ 23394504 · Номер у Реєстрі САД 1497 · www.alexsaudit.com. ThinCap 140 підтримує професійне судження аудитора, але не замінює його.</div></footer>
+
+<div id="printArea"></div>
+<template id="logoTpl">@@LOGO@@</template>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+/*@@APPJS@@*/
+</script>
+</body>
+</html>
