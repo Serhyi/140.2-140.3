@@ -13,12 +13,20 @@ const CATS = {
   mfo:{label:"МФО з держгарантією (виняток «б»)", excl:true}
 };
 const emptyDebt = () => ({name:"",account:"",cat:"other",open:0,close:0,interest:0,tpAdj:0});
-const emptyPeriod = () => ({enabled:false, debts:[emptyDebt()],
+const emptyPeriod = () => ({debts:[emptyDebt()],
   eqOpen:0, eqClose:0, capAmort:0, fv:0, av:0, fro:0, incOther:0, decOther:0, note:""});
 
 const defaultMethod = () => ({includeDecInObject:false, decreaseWhenTestFails:true, cap:0.30, haircut:0.05});
 
-const blankYear = () => { const periods = {}; PERIODS.forEach(p => periods[p.id] = emptyPeriod()); periods.Q1.enabled = true; return {periods, active:"Q1"}; };
+/* Період заповнений, якщо в ньому внесено хоча б одну суму на кінець періоду / за період.
+   Сальдо на початок (01.01) не враховується: його програма переносить автоматично. */
+function filled(p){
+  if (!p) return false;
+  const nz = v => Math.abs(num(v)) > 0.005;
+  return [p.eqClose, p.fv, p.av, p.fro, p.incOther, p.decOther, p.capAmort].some(nz)
+      || (p.debts||[]).some(d => nz(d.close) || nz(d.interest) || nz(d.tpAdj));
+}
+const blankYear = () => { const periods = {}; PERIODS.forEach(p => periods[p.id] = emptyPeriod()); return {periods, active:"Q1"}; };
 
 /* S.periods і S.active — проекція обраного року (S.meta.year) на S.years; у JSON не серіалізуються */
 function attach(st){
@@ -232,7 +240,7 @@ async function checkFile(){
 
 /* ==================== Похідна модель ==================== */
 function latestPeriodIdOf(y){ const Y = S.years[String(y)]; if (!Y) return null;
-  const en = PERIODS.filter(p=>Y.periods[p.id] && Y.periods[p.id].enabled); return en.length ? en[en.length-1].id : null; }
+  const en = PERIODS.filter(p=>filled(Y.periods[p.id])); return en.length ? en[en.length-1].id : null; }
 function latestPeriodId(){ return latestPeriodIdOf(num(S.meta.year)); }
 
 /* Рядки пулу до року Y (не включно). Джерело року: «manual» — внесено з декларації (має пріоритет),
@@ -267,7 +275,7 @@ function openingPoolForYear(rows){
 function model(){
   const Y = num(S.meta.year), rows = poolRows(Y), opening = openingPoolForYear(rows);
   const results = {};
-  PERIODS.forEach(p => { if (S.periods[p.id].enabled) results[p.id] = calcPeriod(S.periods[p.id], S.meta, S.method, opening); });
+  PERIODS.forEach(p => { if (filled(S.periods[p.id])) results[p.id] = calcPeriod(S.periods[p.id], S.meta, S.method, opening); });
   const lp = latestPeriodId();
   const pool = rows.slice();
   if (lp){ const r = results[lp]; pool.push({year:Y, opening, excess:r.excess, used:r.decrease, closing:r.closing, control:null, diff:null, source:"current", pid:lp, auto:lp}); }
@@ -281,11 +289,10 @@ function renderPeriodBar(){
     <select id="yearSel" style="width:auto;min-width:110px">${ys.map(y=>`<option value="${y}"${y===Y?" selected":""}>${y}${latestPeriodIdOf(y)?"":" (порожній)"}</option>`).join("")}
     <option value="new:${next}">+ Новий рік ${next}</option><option value="new:other">+ Інший рік…</option></select></label>`;
   $("#periodBar").innerHTML = sel + PERIODS.map(p => {
-    const en = S.periods[p.id].enabled;
-    return `<button class="btn ${S.active===p.id?'primary':''}" data-period="${p.id}" aria-pressed="${S.active===p.id}">${p.label} ${num(S.meta.year)}${en?'':' · не заповнено'}</button>`;
-  }).join("") + `<label class="chk noprint" style="margin-left:8px;align-items:center"><input type="checkbox" id="perEnabled"> період заповнено</label>`;
-  $("#perEnabled").checked = S.periods[S.active].enabled;
-  $("#periodHint").textContent = "Податкові періоди наростаючим підсумком з 01.01. Результат року (річний або останній заповнений період) автоматично переходить у перенесення на наступні роки. Новий рік створюється з кредиторами і сальдо на 01.01 із попереднього року.";
+    const en = filled(S.periods[p.id]);
+    return `<button class="btn ${S.active===p.id?'primary':''}" data-period="${p.id}" aria-pressed="${S.active===p.id}">${p.label} ${num(S.meta.year)}${en?' · заповнено':' · порожній'}</button>`;
+  }).join("");
+  $("#periodHint").innerHTML = "Оберіть період і внесіть дані наростаючим підсумком з 01.01. Період стає <b>заповненим</b> автоматично, щойно в ньому з'являється хоча б одна сума (сальдо на кінець, проценти, ФВ, АВ, ФРО тощо); порожні періоди в розрахунок і друк не потрапляють. У перенесення на наступні роки йде результат <b>останнього заповненого</b> періоду року: для річної декларації заповніть період «Рік».";
 }
 
 function renderInputs(){
@@ -317,7 +324,7 @@ function renderOutputs(){
   // debt averages
   p.debts.forEach((d,i)=>{ const c = document.querySelector(`[data-avg="${i}"]`); if (c) c.textContent = fmt((num(d.open)+num(d.close))/2); });
   if (!r){
-    $("#debtSum").innerHTML = ""; $("#spOut").textContent = "—"; $("#testOut").innerHTML = `<span class="badge b-info">Інформація</span> Період не заповнено: позначте «період заповнено».`;
+    $("#debtSum").innerHTML = ""; $("#spOut").textContent = "—"; $("#testOut").innerHTML = `<span class="badge b-info">Порожній період</span> Внесіть дані періоду: розрахунок, результат і контрольні процедури з\'являться автоматично після першої суми.`;
     $("#kpis").innerHTML = ""; $("#traceTbl tbody").innerHTML = ""; $("#checks").innerHTML = ""; { const z=document.getElementById("checksSum"); if (z) z.innerHTML=""; } return;
   }
   const kp = (l,v,key) => `<div class="kpi${key?' key':''}"><div class="lbl">${l}</div><div class="res">${v}</div></div>`;
@@ -385,7 +392,7 @@ function renderOutputs(){
 
   /* 2. Узгодженість періодів року (наростаючий підсумок від 01.01) */
   { const idx = PERIODS.findIndex(x=>x.id===S.active);
-    const prev = PERIODS.slice(0,idx).map(x=>x.id).filter(id=>S.periods[id].enabled).pop();
+    const prev = PERIODS.slice(0,idx).map(x=>x.id).filter(id=>filled(S.periods[id])).pop();
     if (prev){ const q = S.periods[prev], pl = PERIODS.find(x=>x.id===prev).label;
       const sumI = x=>x.debts.reduce((a,d)=>a+num(d.interest),0);
       const dec = [["проценти",sumI(q),r.grossInt],["ФВ",num(q.fv),num(p.fv)],["АВ",num(q.av),num(p.av)]].filter(x=>x[2] < x[1]-0.5).map(x=>x[0]);
@@ -520,7 +527,7 @@ document.addEventListener("input", e => {
   else if (t.dataset.h!=null){ const h=S.history[+t.dataset.h]; const f=t.dataset.f;
     h[f] = f==="note" ? t.value : (f==="control" && t.value.trim()==="") ? null : num(t.value); }
   else return;
-  persist(); renderOutputs();
+  persist(); renderOutputs(); renderPeriodBar();
   document.querySelectorAll(".recalc-msg").forEach(m => m.textContent = "");
 });
 document.addEventListener("change", e => {
@@ -533,7 +540,6 @@ document.addEventListener("change", e => {
     persist(); renderAll(); return;
   }
   if (t.dataset.mm && t.type==="checkbox"){ S.method[t.dataset.mm] = t.checked; }
-  else if (t.id==="perEnabled"){ S.periods[S.active].enabled = t.checked; }
   else if (t.dataset.m==="kind" || t.dataset.m==="regime"){ S.meta[t.dataset.m] = t.value; }
   else if (t.dataset.h!=null || t.id==="poolInitial" || t.dataset.m==="year"){ /* re-render pool table after edit */ }
   else if (t.classList?.contains("num")) { t.value = fmtIn(num(t.value)); persist(); return; }
@@ -662,7 +668,7 @@ function periodSection(pid, n){
 }
 function printWorkingPaper(mode){
   const M = model();
-  const pids = mode==="all" ? PERIODS.filter(x=>S.periods[x.id].enabled).map(x=>x.id) : [S.active];
+  const pids = mode==="all" ? PERIODS.filter(x=>filled(S.periods[x.id])).map(x=>x.id) : [S.active];
   if (!pids.length || !M.results[pids[0]]){ alert("Період не заповнено: немає що друкувати."); return; }
   const fn = [], fnNo = {};
   M.pool.forEach(x=>{ const a = Math.abs(num(x.adj))>0.005;
@@ -710,7 +716,7 @@ function recalc(){
   const r = model().results[S.active];
   const tm = new Date().toLocaleTimeString("uk-UA",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
   const text = r ? `Перераховано о ${tm}: кредиторів ${S.periods[S.active].debts.length}; 3.1.1 = ${fmt(r.excess)} грн; 3.2.1 = ${fmt(r.decrease)} грн`
-                      : `Період не заповнено: позначте «період заповнено» (${tm})`;
+                      : `Період порожній: внесіть дані періоду (${tm})`;
   document.querySelectorAll(".recalc-msg").forEach(m => m.textContent = text);
   document.querySelectorAll("#kpis .kpi, #debtSum .kpi").forEach(k=>{ k.classList.remove("flash"); void k.offsetWidth; k.classList.add("flash"); });
 }
