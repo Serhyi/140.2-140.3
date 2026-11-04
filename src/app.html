@@ -323,14 +323,12 @@ footer.app{border-top:1px solid var(--border);color:var(--muted);font-size:11px;
       <section class="card">
         <h2>Пул процентів, перенесених на майбутні періоди</h2>
         <p class="lead">Залишок на початок року = залишок на кінець попереднього року × (1 − 5 %). Протягом року зменшення за 3.2.1 списується з цього залишку, а нове перевищення за 3.1.1 додається в повній сумі. Модель відповідає консультації ДПС: неврахований залишок станом на 01.01 зменшується на 5 % і додається до процентів поточного року.</p>
-        <div class="grid" style="margin-bottom:12px">
-          <label class="f">Залишок до першого року таблиці (якщо є), грн<input class="num" id="poolInitial" inputmode="decimal"></label>
-        </div>
+        <p class="lead" id="poolFirstNote"></p>
         <div class="tbl-wrap"><table id="poolTbl">
           <thead><tr><th>Рік</th><th class="n">Залишок на початок (після −5 %), грн</th><th class="n">3.1.1 Перевищення (+), грн</th><th class="n">3.2.1 Зменшення (−), грн</th><th class="n">Залишок на кінець, грн</th><th class="n">Контроль: за даними платника, грн</th><th class="n">Розбіжність, грн</th><th class="noprint"></th></tr></thead>
           <tbody></tbody>
         </table></div>
-        <div class="toolbar noprint"><button class="btn" id="addYear">+ Додати рік</button></div>
+        <div class="toolbar noprint"><button class="btn" id="addYearFirst">+ Додати рік на початок</button><button class="btn" id="addYear">+ Додати рік у кінець</button></div>
         <p class="lead" id="poolCurNote"></p>
       </section>
       <section class="card">

@@ -340,14 +340,12 @@ footer.app{border-top:1px solid var(--border);color:var(--muted);font-size:11px;
       <section class="card">
         <h2>Пул процентів, перенесених на майбутні періоди</h2>
         <p class="lead">Залишок на початок року = залишок на кінець попереднього року × (1 − 5 %). Протягом року зменшення за 3.2.1 списується з цього залишку, а нове перевищення за 3.1.1 додається в повній сумі. Модель відповідає консультації ДПС: неврахований залишок станом на 01.01 зменшується на 5 % і додається до процентів поточного року.</p>
-        <div class="grid" style="margin-bottom:12px">
-          <label class="f">Залишок до першого року таблиці (якщо є), грн<input class="num" id="poolInitial" inputmode="decimal"></label>
-        </div>
+        <p class="lead" id="poolFirstNote"></p>
         <div class="tbl-wrap"><table id="poolTbl">
           <thead><tr><th>Рік</th><th class="n">Залишок на початок (після −5 %), грн</th><th class="n">3.1.1 Перевищення (+), грн</th><th class="n">3.2.1 Зменшення (−), грн</th><th class="n">Залишок на кінець, грн</th><th class="n">Контроль: за даними платника, грн</th><th class="n">Розбіжність, грн</th><th class="noprint"></th></tr></thead>
           <tbody></tbody>
         </table></div>
-        <div class="toolbar noprint"><button class="btn" id="addYear">+ Додати рік</button></div>
+        <div class="toolbar noprint"><button class="btn" id="addYearFirst">+ Додати рік на початок</button><button class="btn" id="addYear">+ Додати рік у кінець</button></div>
         <p class="lead" id="poolCurNote"></p>
       </section>
       <section class="card">
@@ -465,13 +463,14 @@ function migrate(s){
     p.debts = (p.debts||[]).map(d=>Object.assign(emptyDebt(), d));
     if (p.interest!=null){ if (p.debts.length) p.debts[0].interest = num(p.debts[0].interest)+num(p.interest); delete p.interest; }
   });
-  s.schema = 2; return s;
+  if ((s.schema||1) < 3 && num(s.poolInitial)) s.poolInitial = num(s.poolInitial) * (1 - s.method.haircut);
+  s.schema = 3; return s;
 }
 
 function blankState(){
   const periods = {}; PERIODS.forEach(p => periods[p.id] = emptyPeriod());
   periods.Q1.enabled = true;
-  return {schema:2, meta:{payer:"",edrpou:"",year:new Date().getFullYear(),kind:"general",preparer:"",reviewer:"",wpIndex:""},
+  return {schema:3, meta:{payer:"",edrpou:"",year:new Date().getFullYear(),kind:"general",preparer:"",reviewer:"",wpIndex:""},
           method:defaultMethod(), poolInitial:0, history:[], periods, active:"Q1"};
 }
 
@@ -486,9 +485,11 @@ function exampleState(){
 /* Pool engine: single balance; uniform haircut => order-independent total */
 function runPool(history, initial, haircut){
   const rows = [...history].sort((a,b)=>a.year-b.year);
-  let closing = num(initial), out = [];
+  let closing = 0, out = [];
   rows.forEach((r,i) => {
-    const opening = (i===0 && !num(initial)) ? 0 : closing * (1 - haircut);
+    // перший рік: залишок на 01.01, введений користувачем (вже після зменшення на 5 %)
+    // за кожен рік, що минув (зокрема пропущені роки), — окреме зменшення на 5 %
+    const opening = i===0 ? num(initial) : closing * Math.pow(1 - haircut, r.year - rows[i-1].year);
     closing = opening + num(r.excess) - num(r.used);
     out.push({...r, opening, closing, diff: (r.control==null||r.control==="") ? null : closing - num(r.control)});
   });
@@ -499,10 +500,10 @@ function runPool(history, initial, haircut){
 function runVintages(history, initial, haircut){
   const rows = [...history].sort((a,b)=>a.year-b.year);
   const vint = []; // {year, bal}
-  if (num(initial)) vint.push({year:"до "+(rows[0]?.year??""), bal:num(initial)});
+  if (num(initial)) vint.push({year:"на 01.01."+(rows[0]?.year??""), bal:num(initial)});
   const matrix = [];
   rows.forEach((r,i) => {
-    if (i>0 || num(initial)) vint.forEach(v => v.bal *= (1-haircut));
+    if (i>0) { const f = Math.pow(1-haircut, r.year - rows[i-1].year); vint.forEach(v => v.bal *= f); }
     let use = num(r.used);
     for (const v of vint){ const t = Math.min(v.bal, use); v.bal -= t; use -= t; if (use<=1e-9) break; }
     if (num(r.excess)) vint.push({year:r.year, bal:num(r.excess)});
@@ -597,7 +598,8 @@ function priorHistory(){ return S.history.filter(h => h.year < num(S.meta.year))
 function openingPoolForYear(){
   const r = runPool(priorHistory(), S.poolInitial, S.method.haircut);
   if (!r.length) return num(S.poolInitial);
-  return r[r.length-1].closing * (1 - S.method.haircut);
+  const last = r[r.length-1];
+  return last.closing * Math.pow(1 - S.method.haircut, Math.max(1, num(S.meta.year) - last.year));
 }
 function model(){
   const opening = openingPoolForYear();
@@ -710,6 +712,12 @@ function renderOutputs(){
   if (p.debts.length<=2 && new Set(p.debts.map(d=>d.name)).size<=1) add("warn","У тест включено одного кредитора. Підтвердіть повноту переліку боргових зобов'язань перед нерезидентами (ОСВ 50/55/60/68, позики, фінансова допомога).");
   const prevCtl = runPool(priorHistory(), S.poolInitial, S.method.haircut).filter(x=>x.diff!=null && Math.abs(x.diff)>0.5);
   prevCtl.forEach(x=>add("err",`Залишок пулу на кінець ${x.year} року не збігається з даними платника: розбіжність ${fmt(x.diff)} грн (див. «Перенесення»).`));
+  { const ys = priorHistory().map(h=>h.year).sort((a,b)=>a-b), gaps = [];
+    for (let i=1;i<ys.length;i++) for (let y=ys[i-1]+1;y<ys[i];y++) gaps.push(y);
+    if (ys.length && ys[ys.length-1] < num(S.meta.year)-1) for (let y=ys[ys.length-1]+1;y<num(S.meta.year);y++) gaps.push(y);
+    if (gaps.length) add("warn",`В історії перенесення пропущено роки: ${gaps.join(", ")}. Для них прийнято 3.1.1 = 0 і 3.2.1 = 0, а зменшення на 5 % застосовано за кожен рік. Додайте ці роки, якщо в них були суми.`); }
+  { const h0 = [...S.history].sort((a,b)=>a.year-b.year)[0];
+    if (h0 && num(S.poolInitial) && Math.abs(num(S.poolInitial)-num(h0.excess))<0.5) add("warn",`Залишок на 01.01.${h0.year} дорівнює перевищенню 3.1.1 цього ж року (${fmt(num(h0.excess))}). Перевірте, чи сума не врахована двічі: як залишок і як 3.1.1.`); }
   if (!priorHistory().length && !num(S.poolInitial)) add("warn","Історію перенесення не заповнено: залишок на початок року дорівнює 0.");
   if (S.active!=="Y") add("warn","Проміжний період. Остаточні суми 3.1.1/3.2.1 визначаються в річній декларації.");
   if (!String(p.note).trim()) add("warn","Не зазначено джерела вхідних даних (МСА 230): додайте посилання на ОСВ, Ф1, Ф2, РІ.");
@@ -718,8 +726,9 @@ function renderOutputs(){
 
 /* ==================== Render: pool ==================== */
 function renderPool(){
-  $("#poolInitial").value = fmtIn(S.poolInitial);
   const M = model(); const cy = num(S.meta.year);
+  const firstYear = M.pool.length ? M.pool[0].year : null;
+  const openIn = () => `<input class="num" id="poolInitial" inputmode="decimal" value="${fmtIn(S.poolInitial)}" title="Залишок на 01.01.${firstYear} (вже після зменшення на 5 %)" aria-label="Залишок на 01.01.${firstYear}">`;
   const byYear = Object.fromEntries(M.pool.map(x=>[x.year,x]));
   const tb = $("#poolTbl tbody");
   const prior = [...S.history].sort((a,b)=>a.year-b.year);
@@ -727,7 +736,7 @@ function renderPool(){
     const future = h.year >= cy;
     return `<tr${future?' class="muted"':''}>
       <td><input class="num" style="min-width:70px" data-h="${idx}" data-f="year" value="${h.year}"></td>
-      <td class="n">${future?'—':fmt(x.opening)}</td>
+      <td class="n">${future?'—':(h.year===firstYear?openIn():fmt(x.opening))}</td>
       <td><input class="num" data-h="${idx}" data-f="excess" value="${fmtIn(h.excess)}"></td>
       <td><input class="num" data-h="${idx}" data-f="used" value="${fmtIn(h.used)}"></td>
       <td class="n">${future?'ігнорується (≥ звітного року)':fmt(x.closing)}</td>
@@ -735,8 +744,9 @@ function renderPool(){
       <td class="n">${x.diff==null?'—':(Math.abs(x.diff)>0.5?`<span class="badge b-err">Розбіжність</span><br>${fmt(x.diff)}`:`<span class="badge b-ok">Збігається</span>`)}</td>
       <td class="noprint"><button class="btn icon ghost" data-delh="${idx}" aria-label="Видалити рік ${h.year}">✕</button></td></tr>`;}).join("");
   const cur = byYear[cy];
-  if (cur && M.lp) html += `<tr class="cur"><td>${cy}</td><td class="n">${fmt(cur.opening)}</td><td class="n">${fmt(cur.excess)}</td><td class="n">${fmt(cur.used)}</td><td class="n">${fmt(cur.closing)}</td><td colspan="3" class="muted">з розрахунку: ${PERIODS.find(p=>p.id===M.lp).label}</td></tr>`;
+  if (cur && M.lp) html += `<tr class="cur"><td>${cy}</td><td class="n">${cy===firstYear?openIn():fmt(cur.opening)}</td><td class="n">${fmt(cur.excess)}</td><td class="n">${fmt(cur.used)}</td><td class="n">${fmt(cur.closing)}</td><td colspan="3" class="muted">з розрахунку: ${PERIODS.find(p=>p.id===M.lp).label}</td></tr>`;
   tb.innerHTML = html;
+  $("#poolFirstNote").textContent = firstYear ? `Залишок на 01.01.${firstYear} вводиться в рядку ${firstYear} року (колонка «Залишок на початок») у сумі вже після зменшення на 5 %. Для наступних років залишок на початок розраховується автоматично.` : "";
   $("#poolCurNote").textContent = "Рядок звітного року заповнюється автоматично з розрахунку. Після подання річної декларації внесіть рік в історію з фактичними сумами 3.1.1 / 3.2.1 і змініть звітний рік у параметрах.";
   // vintages
   const V = runVintages(M.hist, S.poolInitial, S.method.haircut);
@@ -786,6 +796,8 @@ document.addEventListener("click", e => {
   if (t.dataset.recalc!=null) return recalc();
   if (t.id==="addDebt"){ const p=S.periods[S.active]; p.debts.push(emptyDebt()); persist(); renderInputs(); renderOutputs(); return; }
   if (t.dataset.deldebt!=null){ const p=S.periods[S.active]; p.debts.splice(+t.dataset.deldebt,1); if(!p.debts.length) p.debts.push(emptyDebt()); persist(); renderInputs(); renderOutputs(); return; }
+  if (t.id==="addYearFirst"){ const ys=S.history.map(h=>h.year); const y = ys.length?Math.min(...ys)-1:num(S.meta.year)-1;
+    S.history.push({year:y,excess:0,used:0,control:null}); persist(); renderAll(); return; }
   if (t.id==="addYear"){ const ys=S.history.map(h=>h.year); const y = ys.length?Math.max(...ys)+1:num(S.meta.year)-1; S.history.push({year:y,excess:0,used:0,control:null}); persist(); renderPool(); return; }
   if (t.dataset.delh!=null){ S.history.splice(+t.dataset.delh,1); persist(); renderAll(); return; }
   if (t.id==="btnSave") return saveJson();
