@@ -361,7 +361,7 @@ footer.app{border-top:1px solid var(--border);color:var(--muted);font-size:11px;
         <div class="grid">
           <label class="f">Платник податку<input data-m="payer"></label>
           <label class="f">Код ЄДРПОУ<input data-m="edrpou"></label>
-          <label class="f">Звітний рік<input class="num" data-m="year" inputmode="numeric"></label>
+          <div class="f" style="display:flex;flex-direction:column;gap:4px;font:600 13px/1.4 var(--font-sans);color:var(--text-2)">Звітний рік<div class="out" id="yearOut" style="text-align:left">—</div><span class="src">Обирається перемикачем «Рік» на вкладці «Розрахунок періоду»</span></div>
           <label class="f">Номер бухгалтерської довідки<input data-m="docNo" placeholder="напр., 140/9м-2026"></label>
           <label class="f">Дата довідки<input type="date" data-m="docDate"></label>
           <label class="f">Категорія платника<select data-m="kind">
@@ -449,11 +449,13 @@ footer.app{border-top:1px solid var(--border);color:var(--muted);font-size:11px;
           <li>Дані автоматично зберігаються в браузері, але лише на цьому комп'ютері. Якщо очистити історію браузера, вони зникнуть. Тому завжди зберігайте JSON.</li>
         </ul>
 
-        <h3>Крок 6. Перехід на наступний рік</h3>
+        <h3>Крок 6. Наступні роки (2027 і далі)</h3>
         <ul>
-          <li>Після подання річної декларації внесіть на вкладці «Перенесення» рядок звітного року з фактичними сумами 3.1.1 і 3.2.1 з декларації.</li>
-          <li>На вкладці «Параметри та метод» змініть звітний рік.</li>
-          <li>Очистіть періоди нового року: зніміть позначки «період заповнено» або натисніть «Новий розрахунок», а історію перенесення відновіть із JSON.</li>
+          <li>На вкладці «Розрахунок періоду» в перемикачі <b>«Рік»</b> оберіть <b>«+ Новий рік»</b>. Програма створить рік із тими самими кредиторами, рахунками та категоріями, а сальдо боргів і власного капіталу на 01.01 перенесе із сальдо на кінець попереднього року.</li>
+          <li>Результат попереднього року (період «Рік», а якщо його немає — останній заповнений) <b>автоматично</b> потрапляє на вкладку «Перенесення». Вручну нічого вносити не потрібно.</li>
+          <li>Розрахунки минулих років зберігаються. До будь-якого року можна повернутися через перемикач «Рік» або кнопку ↗ у рядку року на вкладці «Перенесення».</li>
+          <li>Якщо декларацію за рік подано із сумами, що відрізняються від розрахунку (наприклад, уточнену), внесіть цей рік на вкладці «Перенесення» вручну: рядок «з декларації» має пріоритет. Програма покаже розбіжність із розрахунком у контрольних процедурах.</li>
+          <li>Зберігайте JSON наприкінці кожного звітного періоду: файл містить усі роки.</li>
         </ul>
 
         <h3>Звідки брати дані</h3>
@@ -508,25 +510,53 @@ const emptyPeriod = () => ({enabled:false, debts:[emptyDebt()],
 
 const defaultMethod = () => ({includeDecInObject:false, decreaseWhenTestFails:true, cap:0.30, haircut:0.05});
 
+const blankYear = () => { const periods = {}; PERIODS.forEach(p => periods[p.id] = emptyPeriod()); periods.Q1.enabled = true; return {periods, active:"Q1"}; };
+
+/* S.periods і S.active — проекція обраного року (S.meta.year) на S.years; у JSON не серіалізуються */
+function attach(st){
+  const yr = () => { const y = String(num(st.meta.year)); if (!st.years[y]) st.years[y] = blankYear(); return st.years[y]; };
+  Object.defineProperty(st, "periods", {get:()=>yr().periods, enumerable:false, configurable:true});
+  Object.defineProperty(st, "active",  {get:()=>yr().active, set:v=>{ yr().active = v; }, enumerable:false, configurable:true});
+  return st;
+}
+
 /* міграція збережених даних попередньої версії */
 function migrate(s){
+  // schema < 4: періоди одного року → s.years[рік]
+  if (!s.years){ const y = String(num((s.meta||{}).year) || new Date().getFullYear());
+    s.years = {}; if (s.periods) s.years[y] = {periods:s.periods, active:s.active||"Q1"}; }
+  delete s.periods; delete s.active;
   s.method = Object.assign(defaultMethod(), s.method||{});
   s.meta = Object.assign({regime:"auto", docNo:"", docDate:""}, s.meta||{});
   if (s.meta.wpIndex && !s.meta.docNo) s.meta.docNo = s.meta.wpIndex; delete s.meta.wpIndex;
   if (!s.schema){ s.method.includeDecInObject = false; }
-  Object.values(s.periods||{}).forEach(p=>{
+  Object.values(s.years).forEach(Y=>{ PERIODS.forEach(pp=>{ if (!Y.periods[pp.id]) Y.periods[pp.id] = emptyPeriod(); }); });
+  Object.values(s.years).flatMap(Y=>Object.values(Y.periods)).forEach(p=>{
     p.debts = (p.debts||[]).map(d=>Object.assign(emptyDebt(), d));
     if (p.interest!=null){ if (p.debts.length) p.debts[0].interest = num(p.debts[0].interest)+num(p.interest); delete p.interest; }
   });
   if ((s.schema||1) < 3 && num(s.poolInitial)) s.poolInitial = num(s.poolInitial) * (1 - s.method.haircut);
-  s.schema = 3; return s;
+  s.history = s.history || [];
+  s.schema = 4; return attach(s);
 }
 
 function blankState(){
-  const periods = {}; PERIODS.forEach(p => periods[p.id] = emptyPeriod());
-  periods.Q1.enabled = true;
-  return {schema:3, meta:{payer:"",edrpou:"",year:new Date().getFullYear(),kind:"general",preparer:"",reviewer:"",docNo:"",docDate:""},
-          method:defaultMethod(), poolInitial:0, history:[], periods, active:"Q1"};
+  const y = new Date().getFullYear();
+  return migrate({schema:4, meta:{payer:"",edrpou:"",year:y,kind:"general",preparer:"",reviewer:"",docNo:"",docDate:""},
+          method:defaultMethod(), poolInitial:0, history:[], years:{[y]:blankYear()}});
+}
+
+/* Новий рік: кредитори і сальдо на 01.01 — із сальдо на 31.12 (останнього заповненого періоду) попереднього року */
+function createYear(y){
+  const k = String(y); if (S.years[k]) return;
+  const Y = blankYear(), q = Y.periods.Q1;
+  const prevY = Object.keys(S.years).map(Number).filter(v=>v<y).sort((a,b)=>a-b).pop();
+  const pid = prevY!=null ? latestPeriodIdOf(prevY) : null;
+  if (pid){ const src = S.years[String(prevY)].periods[pid];
+    q.debts = src.debts.map(d=>({...emptyDebt(), name:d.name, account:d.account, cat:d.cat, open:num(d.close)}));
+    if (!q.debts.length) q.debts = [emptyDebt()];
+    q.eqOpen = num(src.eqClose); }
+  S.years[k] = Y;
 }
 
 /* Приклад підставляється на етапі збирання з файлу кейсу (build.py --case).
@@ -644,7 +674,7 @@ const $ = s => document.querySelector(s);
 /* ==================== State ==================== */
 let S;
 try { S = JSON.parse(localStorage.getItem(STORE_KEY)) || null; } catch(e){ S = null; }
-if (!S || !S.periods) S = exampleState();
+if (!S || !(S.periods || S.years)) S = exampleState();
 /* Оновлена ревізія кейсу у файлі: пропонуємо замінити старіші дані, збережені в браузері */
 else if (CASE && CASE.rev && (S.caseRev||0) < CASE.rev &&
          confirm("Файл містить оновлені дані кейсу «"+(CASE.title||"")+"». Завантажити їх замість даних, збережених у браузері?\n\nСкасувати — залишити збережені дані."))
@@ -652,33 +682,61 @@ else if (CASE && CASE.rev && (S.caseRev||0) < CASE.rev &&
 S = migrate(S);
 function persist(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(S)); }catch(e){} }
 
-/* Derived model: history (prior years) + current year auto-row from latest enabled period */
-function latestPeriodId(){ const en = PERIODS.filter(p=>S.periods[p.id].enabled); return en.length ? en[en.length-1].id : null; }
-function priorHistory(){ return S.history.filter(h => h.year < num(S.meta.year)); }
-function openingPoolForYear(){
-  const r = runPool(priorHistory(), S.poolInitial, S.method.haircut);
-  if (!r.length) return num(S.poolInitial);
-  const last = r[r.length-1];
+/* ==================== Похідна модель ==================== */
+function latestPeriodIdOf(y){ const Y = S.years[String(y)]; if (!Y) return null;
+  const en = PERIODS.filter(p=>Y.periods[p.id] && Y.periods[p.id].enabled); return en.length ? en[en.length-1].id : null; }
+function latestPeriodId(){ return latestPeriodIdOf(num(S.meta.year)); }
+
+/* Рядки пулу до року Y (не включно). Джерело року: «manual» — внесено з декларації (має пріоритет),
+   «calc» — річний (або останній) розрахунок у програмі. Залишок рахується послідовно рік за роком. */
+function poolRows(Y){
+  const h = S.method.haircut, manual = new Map();
+  S.history.forEach((r,i)=>{ const y = num(r.year); if (y < Y && !manual.has(y)) manual.set(y, {...r, year:y, idx:i}); });
+  const calcYears = Object.keys(S.years).map(Number).filter(y => y < Y && latestPeriodIdOf(y));
+  const years = [...new Set([...manual.keys(), ...calcYears])].sort((a,b)=>a-b);
+  const out = []; let closing = 0, prev = null;
+  years.forEach((y,i)=>{
+    const opening = i===0 ? num(S.poolInitial) : closing * Math.pow(1-h, y-prev);
+    const pid = latestPeriodIdOf(y);
+    const calc = pid ? calcPeriod(S.years[String(y)].periods[pid], {...S.meta, year:y}, S.method, opening) : null;
+    const row = manual.has(y)
+      ? {...manual.get(y), source:"manual", pid, calcExcess: calc ? calc.excess : null, calcUsed: calc ? calc.decrease : null}
+      : {year:y, excess:calc.excess, used:calc.decrease, control:null, note:"", source:"calc", pid};
+    closing = opening + num(row.excess) - num(row.used);
+    out.push({...row, opening, closing, diff:(row.control==null||row.control==="") ? null : closing - num(row.control)});
+    prev = y;
+  });
+  return out;
+}
+function priorHistory(){ return poolRows(num(S.meta.year)); }
+function openingPoolForYear(rows){
+  rows = rows || poolRows(num(S.meta.year));
+  if (!rows.length) return num(S.poolInitial);
+  const last = rows[rows.length-1];
   return last.closing * Math.pow(1 - S.method.haircut, Math.max(1, num(S.meta.year) - last.year));
 }
 function model(){
-  const opening = openingPoolForYear();
+  const Y = num(S.meta.year), rows = poolRows(Y), opening = openingPoolForYear(rows);
   const results = {};
   PERIODS.forEach(p => { if (S.periods[p.id].enabled) results[p.id] = calcPeriod(S.periods[p.id], S.meta, S.method, opening); });
   const lp = latestPeriodId();
-  const hist = priorHistory().slice();
-  if (lp) hist.push({year:num(S.meta.year), excess:results[lp].excess, used:results[lp].decrease, control:null, auto:lp});
-  return {opening, results, lp, pool: runPool(hist, S.poolInitial, S.method.haircut), hist};
+  const pool = rows.slice();
+  if (lp){ const r = results[lp]; pool.push({year:Y, opening, excess:r.excess, used:r.decrease, closing:r.closing, control:null, diff:null, source:"current", pid:lp, auto:lp}); }
+  return {opening, results, lp, pool, hist: pool};
 }
 
 /* ==================== Render: calc ==================== */
 function renderPeriodBar(){
-  $("#periodBar").innerHTML = PERIODS.map(p => {
+  const Y = num(S.meta.year), ys = Object.keys(S.years).map(Number).sort((a,b)=>a-b), next = Math.max(...ys, Y) + 1;
+  const sel = `<label class="f noprint" style="flex-direction:row;align-items:center;gap:8px;margin-right:8px">Рік
+    <select id="yearSel" style="width:auto;min-width:110px">${ys.map(y=>`<option value="${y}"${y===Y?" selected":""}>${y}${latestPeriodIdOf(y)?"":" (порожній)"}</option>`).join("")}
+    <option value="new:${next}">+ Новий рік ${next}</option><option value="new:other">+ Інший рік…</option></select></label>`;
+  $("#periodBar").innerHTML = sel + PERIODS.map(p => {
     const en = S.periods[p.id].enabled;
     return `<button class="btn ${S.active===p.id?'primary':''}" data-period="${p.id}" aria-pressed="${S.active===p.id}">${p.label} ${num(S.meta.year)}${en?'':' · не заповнено'}</button>`;
   }).join("") + `<label class="chk noprint" style="margin-left:8px;align-items:center"><input type="checkbox" id="perEnabled"> період заповнено</label>`;
   $("#perEnabled").checked = S.periods[S.active].enabled;
-  $("#periodHint").textContent = "Податкові періоди наростаючим підсумком: дані вводяться з початку року. Зменшення на 5 % застосовується раз на рік, на початок року. Для рядка поточного року в таблиці перенесення береться останній заповнений період.";
+  $("#periodHint").textContent = "Податкові періоди наростаючим підсумком з 01.01. Результат року (річний або останній заповнений період) автоматично переходить у перенесення на наступні роки. Новий рік створюється з кредиторами і сальдо на 01.01 із попереднього року.";
 }
 
 function renderInputs(){
@@ -798,26 +856,35 @@ function renderOutputs(){
   if (DL.some(d=>d.cat==="related") && r.tpAdj===0 && S.active==="Y") add("warn","Є пов'язані кредитори. Підтвердіть, що процентна ставка відповідає принципу «витягнутої руки» (звіт про КО, документація з ТЦУ), або внесіть коригування за ст. 39.");
 
   /* 4. Історія перенесення */
-  { const H = S.history, years = H.map(h=>num(h.year));
+  { const H = S.history, years = H.map(h=>num(h.year)), rows = poolRows(Y);
     const dup = [...new Set(years.filter((y,i)=>years.indexOf(y)!==i))];
     if (dup.length) add("err","В історії перенесення повторюються роки: "+dup.join(", ")+". Залиште по одному рядку на рік.");
     const late = H.filter(h=>num(h.year)>=Y).map(h=>h.year);
-    if (late.length) add("warn","В історії є рядки звітного або пізніших років ("+late.join(", ")+"). Вони не враховуються: звітний рік береться з розрахунку.");
-    const both = priorHistory().filter(h=>num(h.excess)>0.005 && num(h.used)>0.005).map(h=>h.year);
+    if (late.length) add("info","Рядки, внесені вручну за "+late.join(", ")+" рік, не враховуються для "+Y+" року.");
+    const both = rows.filter(h=>h.source==="manual" && num(h.excess)>0.005 && num(h.used)>0.005).map(h=>h.year);
     if (both.length) add("warn","У роках "+both.join(", ")+" одночасно є 3.1.1 і 3.2.1. У річній декларації таке неможливо: перевищення виникає лише за відсутності невикористаного ліміту. Перевірте суми.");
-    const negY = runPool(priorHistory(), S.poolInitial, S.method.haircut).filter(x=>x.closing < -0.005).map(x=>x.year);
+    rows.filter(h=>h.source==="manual" && h.calcExcess!=null && (Math.abs(num(h.excess)-h.calcExcess)>0.5 || Math.abs(num(h.used)-h.calcUsed)>0.5))
+      .forEach(h=>add("warn",`${h.year} рік: суми, внесені вручну (3.1.1 = ${fmt(num(h.excess))}, 3.2.1 = ${fmt(num(h.used))}), відрізняються від розрахунку в програмі (${fmt(h.calcExcess)} / ${fmt(h.calcUsed)}). Використано внесені вручну. Видаліть ручний рядок, якщо декларацію подано за розрахунком.`));
+    const notAnnual = rows.filter(h=>h.source==="calc" && h.pid!=="Y").map(h=>h.year+" ("+PERIODS.find(p=>p.id===h.pid).label+")");
+    if (notAnnual.length) add("warn","Для "+notAnnual.join(", ")+" немає річного розрахунку: у перенесення взято останній заповнений період. Заповніть період «Рік».");
+    const negY = rows.filter(x=>x.closing < -0.005).map(x=>x.year);
     if (negY.length) add("err","Від'ємний залишок перенесених процентів на кінець "+negY.join(", ")+" року: використано більше, ніж було накопичено. Перевірте суми 3.2.1.");
-    const ctl = runPool(priorHistory(), S.poolInitial, S.method.haircut).filter(x=>x.diff!=null && Math.abs(x.diff)>0.5);
-    ctl.forEach(x=>{ const n = String(x.note||"").trim();
+    rows.filter(x=>x.diff!=null && Math.abs(x.diff)>0.5).forEach(x=>{ const n = String(x.note||"").trim();
       if (n) add("info",`Залишок на кінець ${x.year} року відрізняється від залишку за декларацією на ${fmt(x.diff)} грн — пояснено: ${esc(n)}`);
       else add("err",`Залишок на кінець ${x.year} року не збігається із залишком за декларацією: розбіжність ${fmt(x.diff)} грн. Виправте дані або додайте пояснення на вкладці «Перенесення».`); });
-    const ys = priorHistory().map(h=>num(h.year)).sort((a,b)=>a-b), gaps = [];
+    const ys = rows.map(x=>x.year), gaps = [];
     for (let i=1;i<ys.length;i++) for (let y=ys[i-1]+1;y<ys[i];y++) gaps.push(y);
     if (ys.length) for (let y=ys[ys.length-1]+1;y<Y;y++) gaps.push(y);
-    if (gaps.length) add("warn",`В історії перенесення пропущено роки: ${gaps.join(", ")}. Для них прийнято 3.1.1 = 0 і 3.2.1 = 0, зменшення на 5 % застосовано за кожен рік. Додайте ці роки, якщо в них були суми.`);
-    const h0 = [...H].sort((a,b)=>a.year-b.year)[0];
+    if (gaps.length) add("warn",`У перенесенні пропущено роки: ${gaps.join(", ")}. Для них прийнято 3.1.1 = 0 і 3.2.1 = 0, зменшення на 5 % застосовано за кожен рік. Додайте ці роки, якщо в них були суми.`);
+    const h0 = rows[0];
     if (h0 && num(S.poolInitial) && Math.abs(num(S.poolInitial)-num(h0.excess))<0.5) add("warn",`Залишок на 01.01.${h0.year} дорівнює перевищенню 3.1.1 цього ж року (${fmt(num(h0.excess))}). Перевірте, чи сума не врахована двічі.`);
-    if (!ys.length && !num(S.poolInitial)) add("info","Історію перенесення не заповнено: залишок перенесених процентів на початок року дорівнює 0. Якщо в минулих роках були суми 3.1.1, внесіть їх на вкладці «Перенесення».");
+    if (!rows.length && !num(S.poolInitial)) add("info","Перенесення порожнє: залишок перенесених процентів на початок року дорівнює 0. Якщо в минулих роках були суми 3.1.1, внесіть їх на вкладці «Перенесення».");
+    // сальдо на 01.01 = сальдо на 31.12 попереднього року, розрахованого в програмі
+    const pp = latestPeriodIdOf(Y-1);
+    if (pp){ const src = S.years[String(Y-1)].periods[pp];
+      const cl = src.debts.reduce((a,d)=>a+num(d.close),0), op = p.debts.reduce((a,d)=>a+num(d.open),0);
+      if (Math.abs(cl-op)>0.5 || Math.abs(num(src.eqClose)-num(p.eqOpen))>0.5)
+        add("warn",`Сальдо на 01.01.${Y} (борг ${fmt(op)}, капітал ${fmt(num(p.eqOpen))}) не дорівнює сальдо на кінець ${Y-1} року в програмі (${fmt(cl)}, ${fmt(num(src.eqClose))}).`); }
   }
 
   /* 5. Налаштування і довідка */
@@ -841,27 +908,35 @@ function renderPool(){
   const M = model(); const cy = num(S.meta.year);
   const firstYear = M.pool.length ? M.pool[0].year : null;
   const openIn = () => `<input class="num" id="poolInitial" inputmode="decimal" value="${fmtIn(S.poolInitial)}" title="Залишок на 01.01.${firstYear} (вже після зменшення на 5 %)" aria-label="Залишок на 01.01.${firstYear}">`;
-  const byYear = Object.fromEntries(M.pool.map(x=>[x.year,x]));
-  const tb = $("#poolTbl tbody");
-  const prior = [...S.history].sort((a,b)=>a.year-b.year);
-  let html = prior.map((h)=>{ const idx = S.history.indexOf(h); const x = byYear[h.year] || {};
-    const future = h.year >= cy;
-    return `<tr${future?' class="muted"':''}>
-      <td><input class="num" style="min-width:70px" data-h="${idx}" data-f="year" value="${h.year}"></td>
-      <td class="n">${future?'—':(h.year===firstYear?openIn():fmt(x.opening))}</td>
-      <td><input class="num" data-h="${idx}" data-f="excess" value="${fmtIn(h.excess)}"></td>
-      <td><input class="num" data-h="${idx}" data-f="used" value="${fmtIn(h.used)}"></td>
-      <td class="n">${future?'ігнорується (≥ звітного року)':fmt(x.closing)}</td>
-      <td><input class="num" data-h="${idx}" data-f="control" value="${h.control==null?'':fmtIn(h.control)}" aria-label="Контроль ${h.year}">
-        ${(x.diff!=null && Math.abs(x.diff)>0.5) || h.note ? `<input class="note-in" data-h="${idx}" data-f="note" value="${esc(h.note||'')}" placeholder="Пояснення розбіжності" aria-label="Пояснення розбіжності ${h.year}">` : ''}</td>
-      <td class="n">${x.diff==null?'—':(Math.abs(x.diff)>0.5?(h.note?`<span class="badge b-info" title="${esc(h.note)}">Пояснено</span><br>${fmt(x.diff)}`:`<span class="badge b-err">Розбіжність</span><br>${fmt(x.diff)}`):`<span class="badge b-ok">Збігається</span>`)}</td>
-      <td class="noprint"><button class="btn icon ghost" data-delh="${idx}" aria-label="Видалити рік ${h.year}">✕</button></td></tr>`;}).join("");
-  const cur = byYear[cy];
-  if (cur && M.lp) html += `<tr class="cur"><td>${cy}</td><td class="n">${cy===firstYear?openIn():fmt(cur.opening)}</td><td class="n">${fmt(cur.excess)}</td><td class="n">${fmt(cur.used)}</td><td class="n">${fmt(cur.closing)}</td><td colspan="3" class="muted">з розрахунку: ${PERIODS.find(p=>p.id===M.lp).label}</td></tr>`;
-  tb.innerHTML = html;
-  $("#poolFirstNote").textContent = firstYear ? `Залишок на 01.01.${firstYear} вводиться в рядку ${firstYear} року (колонка «Залишок на початок») у сумі вже після зменшення на 5 %. Для наступних років залишок на початок розраховується автоматично.` : "";
-  $("#poolCurNote").textContent = "Рядок звітного року заповнюється автоматично з розрахунку. Після подання річної декларації внесіть рік в історію з фактичними сумами 3.1.1 / 3.2.1 і змініть звітний рік у параметрах.";
-  // vintages
+  const badge = x => x.diff==null ? '—' : (Math.abs(x.diff)>0.5 ? (x.note?`<span class="badge b-info" title="${esc(x.note)}">Пояснено</span><br>${fmt(x.diff)}`:`<span class="badge b-err">Розбіжність</span><br>${fmt(x.diff)}`) : `<span class="badge b-ok">Збігається</span>`);
+  const goBtn = y => `<button class="btn icon ghost" data-goyear="${y}" title="Відкрити розрахунок ${y} року" aria-label="Відкрити розрахунок ${y} року">↗</button>`;
+  let html = M.pool.map(x=>{
+    const op = x.year===firstYear ? openIn() : fmt(x.opening);
+    if (x.source==="manual"){ const i = x.idx, h = S.history[i];
+      const calcNote = x.calcExcess!=null ? `<div class="src">У програмі: 3.1.1 = ${fmt(x.calcExcess)}, 3.2.1 = ${fmt(x.calcUsed)}</div>` : "";
+      return `<tr>
+      <td><input class="num" style="min-width:70px" data-h="${i}" data-f="year" value="${h.year}"><div class="src">з декларації</div></td>
+      <td class="n">${op}</td>
+      <td><input class="num" data-h="${i}" data-f="excess" value="${fmtIn(h.excess)}">${calcNote}</td>
+      <td><input class="num" data-h="${i}" data-f="used" value="${fmtIn(h.used)}"></td>
+      <td class="n">${fmt(x.closing)}</td>
+      <td><input class="num" data-h="${i}" data-f="control" value="${h.control==null?'':fmtIn(h.control)}" aria-label="Звірка ${h.year}">
+        ${(x.diff!=null && Math.abs(x.diff)>0.5) || h.note ? `<input class="note-in" data-h="${i}" data-f="note" value="${esc(h.note||'')}" placeholder="Пояснення розбіжності" aria-label="Пояснення розбіжності ${h.year}">` : ''}</td>
+      <td class="n">${badge(x)}</td>
+      <td class="noprint"><button class="btn icon ghost" data-delh="${i}" aria-label="Видалити рік ${h.year}">✕</button></td></tr>`; }
+    const lbl = PERIODS.find(p=>p.id===x.pid).label;
+    return `<tr class="${x.source==="current"?"cur":"calcrow"}"><td>${x.year}<div class="src">${x.source==="current"?"звітний рік":"з розрахунку"}</div></td>
+      <td class="n">${op}</td><td class="n">${fmt(x.excess)}</td><td class="n">${fmt(x.used)}</td><td class="n">${fmt(x.closing)}</td>
+      <td colspan="2" class="muted">${x.source==="current"?"поточний розрахунок: ":"розрахунок у програмі: "}${lbl}${x.pid!=="Y"&&x.source!=="current"?' <span class="badge b-warn">не річний</span>':''}</td>
+      <td class="noprint">${x.source==="current"?"":goBtn(x.year)}</td></tr>`;
+  }).join("");
+  const later = S.history.map((h,i)=>({h,i})).filter(o=>num(o.h.year)>=cy);
+  html += later.map(({h,i})=>`<tr class="muted"><td><input class="num" style="min-width:70px" data-h="${i}" data-f="year" value="${h.year}"><div class="src">з декларації</div></td><td class="n">—</td>
+      <td><input class="num" data-h="${i}" data-f="excess" value="${fmtIn(h.excess)}"></td><td><input class="num" data-h="${i}" data-f="used" value="${fmtIn(h.used)}"></td>
+      <td colspan="3" class="muted">не враховується для ${cy} року</td><td class="noprint"><button class="btn icon ghost" data-delh="${i}" aria-label="Видалити рік ${h.year}">✕</button></td></tr>`).join("");
+  $("#poolTbl tbody").innerHTML = html;
+  $("#poolFirstNote").textContent = firstYear ? `Залишок на 01.01.${firstYear} вводиться в рядку ${firstYear} року (колонка «Залишок на початок») у сумі вже після зменшення на 5 %. Для наступних років залишок рахується автоматично.` : "";
+  $("#poolCurNote").textContent = "Роки, розраховані в програмі, потрапляють у таблицю автоматично. Вручну внесіть лише роки до початку роботи з програмою — суми 3.1.1 і 3.2.1 з поданих декларацій. Рядок, внесений вручну, має пріоритет над розрахунком (наприклад, для уточненої декларації).";
   const V = runVintages(M.hist, S.poolInitial, S.method.haircut);
   $("#vintTbl").innerHTML = `<thead><tr><th>Рік</th>${V.cols.map(c=>`<th class="n">${c}</th>`).join("")}<th class="n">Разом</th></tr></thead><tbody>${
     V.matrix.map(m=>{ const tot = Object.values(m.cells).reduce((a,b)=>a+b,0)-m.unallocated;
@@ -870,6 +945,7 @@ function renderPool(){
 
 /* ==================== Render: params ==================== */
 function renderParams(){
+  { const yo = document.getElementById("yearOut"); if (yo) yo.textContent = String(num(S.meta.year)); }
   document.querySelectorAll("[data-m]").forEach(el=> el.value = S.meta[el.dataset.m] ?? "");
   document.querySelectorAll("[data-mm]").forEach(el=>{ const k = el.dataset.mm;
     if (el.type==="checkbox") el.checked = !!S.method[k]; else el.value = String(S.method[k]).replace(".",","); });
@@ -882,7 +958,7 @@ document.addEventListener("input", e => {
   const t = e.target;
   if (t.dataset.p){ const k=t.dataset.p; S.periods[S.active][k] = t.classList.contains("num") ? num(t.value) : t.value; }
   else if (t.dataset.d!=null){ const d=S.periods[S.active].debts[+t.dataset.d]; d[t.dataset.f] = t.classList.contains("num")?num(t.value):t.value; }
-  else if (t.dataset.m){ S.meta[t.dataset.m] = t.dataset.m==="year" ? num(t.value) : t.value; }
+  else if (t.dataset.m){ S.meta[t.dataset.m] = t.value; }
   else if (t.dataset.mm && t.type!=="checkbox"){ S.method[t.dataset.mm] = num(t.value); }
   else if (t.id==="poolInitial"){ S.poolInitial = num(t.value); }
   else if (t.dataset.h!=null){ const h=S.history[+t.dataset.h]; const f=t.dataset.f;
@@ -893,6 +969,13 @@ document.addEventListener("input", e => {
 });
 document.addEventListener("change", e => {
   const t = e.target;
+  if (t.id==="yearSel"){
+    let v = t.value;
+    if (v==="new:other"){ const a = prompt("Звітний рік (наприклад, 2027):", String(num(S.meta.year)+1)); if (!a || !/^\d{4}$/.test(a.trim())){ renderPeriodBar(); return; } v = "new:"+a.trim(); }
+    if (v.startsWith("new:")){ const y = num(v.slice(4)); if (!S.years[String(y)]) createYear(y); S.meta.year = y; }
+    else S.meta.year = num(v);
+    persist(); renderAll(); return;
+  }
   if (t.dataset.mm && t.type==="checkbox"){ S.method[t.dataset.mm] = t.checked; }
   else if (t.id==="perEnabled"){ S.periods[S.active].enabled = t.checked; }
   else if (t.dataset.m==="kind" || t.dataset.m==="regime"){ S.meta[t.dataset.m] = t.value; }
@@ -909,9 +992,14 @@ document.addEventListener("click", e => {
   if (t.dataset.recalc!=null) return recalc();
   if (t.id==="addDebt"){ const p=S.periods[S.active]; p.debts.push(emptyDebt()); persist(); renderInputs(); renderOutputs(); return; }
   if (t.dataset.deldebt!=null){ const p=S.periods[S.active]; p.debts.splice(+t.dataset.deldebt,1); if(!p.debts.length) p.debts.push(emptyDebt()); persist(); renderInputs(); renderOutputs(); return; }
-  if (t.id==="addYearFirst"){ const ys=S.history.map(h=>h.year); const y = ys.length?Math.min(...ys)-1:num(S.meta.year)-1;
+  if (t.dataset.goyear){ S.meta.year = num(t.dataset.goyear); persist(); renderAll();
+    document.querySelector('#tabs [data-tab="calc"]').click(); return; }
+  if (t.id==="addYearFirst"){ const ys = model().pool.map(x=>x.year); const y = (ys.length?Math.min(...ys):num(S.meta.year))-1;
     S.history.push({year:y,excess:0,used:0,control:null}); persist(); renderAll(); return; }
-  if (t.id==="addYear"){ const ys=S.history.map(h=>h.year); const y = ys.length?Math.max(...ys)+1:num(S.meta.year)-1; S.history.push({year:y,excess:0,used:0,control:null}); persist(); renderPool(); return; }
+  if (t.id==="addYear"){ const Y=num(S.meta.year), have=new Set(model().pool.map(x=>x.year)); const lo = have.size?Math.min(...have):Y-1;
+    let y=null; for (let v=lo; v<Y; v++) if (!have.has(v)) { y=v; break; }
+    if (y==null){ alert("Усі роки до "+Y+" вже є в таблиці. Наступний звітний рік створіть у перемикачі року на вкладці «Розрахунок періоду»."); return; }
+    S.history.push({year:y,excess:0,used:0,control:null}); persist(); renderAll(); return; }
   if (t.dataset.delh!=null){ S.history.splice(+t.dataset.delh,1); persist(); renderAll(); return; }
   if (t.id==="btnSave") return saveJson();
   if (t.id==="btnXlsx") return exportXlsx();
