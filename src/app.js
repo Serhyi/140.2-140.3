@@ -43,7 +43,8 @@ function blankState(){
 const CASE = /*@@CASE@@*/null;
 function exampleState(){
   if (!CASE || !CASE.state) return blankState();
-  return migrate(JSON.parse(JSON.stringify(CASE.state)));
+  const st = migrate(JSON.parse(JSON.stringify(CASE.state)));
+  st.caseRev = CASE.rev || 0; return st;
 }
 
 /* Pool engine: single balance; uniform haircut => order-independent total */
@@ -153,6 +154,10 @@ const $ = s => document.querySelector(s);
 let S;
 try { S = JSON.parse(localStorage.getItem(STORE_KEY)) || null; } catch(e){ S = null; }
 if (!S || !S.periods) S = exampleState();
+/* Оновлена ревізія кейсу у файлі: пропонуємо замінити старіші дані, збережені в браузері */
+else if (CASE && CASE.rev && (S.caseRev||0) < CASE.rev &&
+         confirm("Файл містить оновлені дані кейсу «"+(CASE.title||"")+"». Завантажити їх замість даних, збережених у браузері?\n\nСкасувати — залишити збережені дані."))
+  S = exampleState();
 S = migrate(S);
 function persist(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(S)); }catch(e){} }
 
