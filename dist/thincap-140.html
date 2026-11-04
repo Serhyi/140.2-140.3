@@ -294,7 +294,7 @@ footer.app{border-top:1px solid var(--border);color:var(--muted);font-size:11px;
         <p class="lead">Боргові зобов'язання за п. 140.1: кредити, позики, депозити, РЕПО, фінансовий лізинг та інші запозичення незалежно від їх оформлення, разом із нарахованими процентами. До тесту включаються <b>всі</b> нерезиденти, зокрема іноземні банки. Проценти перед іноземними банками і МФО з державною гарантією, а також суми, скориговані за ст. 39, з СП виключаються (абз. 7–8 п. 140.2).</p>
         <div class="debts" id="debts"></div>
         <div class="toolbar noprint" style="margin:10px 0 0;align-items:center">
-          <button class="btn" id="addDebt">+ Додати кредитора / договір</button>
+          <button class="btn" id="addDebt">+ Додати кредитора / рахунок</button>
           <button class="btn primary" data-recalc>↻ Перерахувати</button>
           <span class="recalc-msg" role="status" aria-live="polite"></span>
         </div>
@@ -637,7 +637,7 @@ function renderInputs(){
     <div class="row1">
       <div class="no">${i+1}</div>
       <label class="f">Кредитор-нерезидент<input data-d="${i}" data-f="name" value="${esc(d.name)}"></label>
-      <label class="f acc">Рахунок / договір<input data-d="${i}" data-f="account" value="${esc(d.account)}"></label>
+      <label class="f acc">Рахунок бухобліку<input data-d="${i}" data-f="account" value="${esc(d.account)}"></label>
       <label class="f cat">Категорія кредитора<select data-d="${i}" data-f="cat">${Object.entries(CATS).map(([k,c])=>`<option value="${k}"${d.cat===k?' selected':''}>${esc(c.label)}</option>`).join("")}</select></label>
       <button class="btn icon del noprint" data-deldebt="${i}" title="Видалити рядок" aria-label="Видалити рядок ${i+1}">✕</button>
     </div>
@@ -841,7 +841,7 @@ function exportXlsx(){
     .concat(M.pool.map(x=>[x.year, r2(x.opening), r2(x.excess), r2(x.used), r2(x.closing), x.control==null?"":x.control, x.diff==null?"":r2(x.diff), x.note||""]));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(pool), "Перенесення");
   PERIODS.forEach(pd=>{ const r = M.results[pd.id]; if(!r) return; const p=S.periods[pd.id];
-    const a = [["Період", pd.label+" "+S.meta.year],[],["Кредитор","Рахунок","Категорія","Початок","Кінець","Середнє","Проценти","Коригування ст. 39"]]
+    const a = [["Період", pd.label+" "+S.meta.year],[],["Кредитор","Рахунок бухобліку","Категорія","Початок","Кінець","Середнє","Проценти","Коригування ст. 39"]]
       .concat(p.debts.map(d=>[d.name,d.account,CATS[d.cat]?.label||"",num(d.open),num(d.close),r2((num(d.open)+num(d.close))/2),num(d.interest),num(d.tpAdj)]))
       .concat([["Середній борг","","","","",r2(r.debtAvg)],["Середній власний капітал","","","","",r2(r.eqAvg)],["Умова п. 140.2 виконана","","","","",r.testMet?"так":"ні"],[],
       ["Пул на початок року",r2(r.pool)],["Проценти у витратах",r2(r.grossInt)],["− ст. 39",r2(r.tpAdj)],["− банки/МФО",r2(r.exclCat)],["+ амортизація капіталізованих",num(p.capAmort)],["СП",r2(r.SP)],["ФРО",num(p.fro)],["Інші різниці (+)",num(p.incOther)],["Інші різниці (−)",num(p.decOther)],
@@ -870,7 +870,7 @@ function periodSection(pid, n){
     : `Середній борг ${fmt(r.debtAvg)} грн; середній власний капітал ${fmt(r.eqAvg)} грн; ${String(r.k).replace(".",",")} × капітал = ${fmt(r.k*r.eqAvg)} грн; співвідношення: ${r.ratio==null?"капітал ≤ 0":r.ratio.toFixed(2).replace(".",",")+"×"}. <b>Умова п. 140.2 ${r.testMet?"виконана":"не виконана"}.</b>`;
   return `<h2>${n}. Період: ${esc(lbl)}</h2>
    <h3>${n}.1. Реєстр боргових зобов'язань перед нерезидентами і тест «3,5 раза»</h3>
-   <table><thead><tr><th class="c">№</th><th>Кредитор</th><th>Рахунок / договір</th><th>Категорія</th><th class="n">Сальдо на початок, грн</th><th class="n">Сальдо на кінець, грн</th><th class="n">Середнє, грн</th><th class="n">Проценти, грн</th><th class="n">Ст. 39, грн</th></tr></thead>
+   <table><thead><tr><th class="c">№</th><th>Кредитор</th><th>Рахунок бухобліку</th><th>Категорія</th><th class="n">Сальдо на початок, грн</th><th class="n">Сальдо на кінець, грн</th><th class="n">Середнє, грн</th><th class="n">Проценти, грн</th><th class="n">Ст. 39, грн</th></tr></thead>
    <tbody>${debts}<tr><th colspan="6">Разом</th><th class="n">${fmt(r.debtAvg)}</th><th class="n">${fmt(r.grossInt)}</th><th class="n">${fmt(r.tpAdj)}</th></tr></tbody></table>
    <div>Власний капітал: на початок ${fmt(num(p.eqOpen))} грн, на кінець ${fmt(num(p.eqClose))} грн. ${test}</div>
    <h3>${n}.2. Хід розрахунку</h3>
