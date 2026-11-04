@@ -153,6 +153,9 @@ td input.num{min-width:0}
 #poolTbl td input{min-width:0}
 #poolTbl{table-layout:fixed}
 #poolTbl .note-in{margin-top:6px;font-size:12px;min-height:32px;padding:5px 8px}
+#poolTbl td.n .note-in{display:block;width:100%;margin-top:6px}
+.adj-btn{display:block;margin:4px 0 0 auto;background:none;border:0;padding:2px 0;font:500 11px var(--font-sans);color:var(--muted);cursor:pointer;min-height:24px}
+.adj-btn:hover{color:var(--accent-text);text-decoration:underline}
 #poolTbl th:first-child{width:84px} #poolTbl th:last-child{width:64px}
 #poolTbl th{white-space:normal}
 @media (max-width:900px){ #poolTbl{table-layout:auto} #poolTbl td input.num{min-width:120px} }
@@ -399,6 +402,7 @@ footer.app{border-top:1px solid var(--border);color:var(--muted);font-size:11px;
           <li>Кнопки <b>«+ Додати рік на початок»</b> і <b>«+ Додати рік у кінець»</b> додають рядки; ✕ видаляє рядок.</li>
           <li>Якщо облік починається не з першого року застосування ст. 140, у рядку першого року в колонці «Залишок на початок» внесіть залишок на 01.01 цього року, вже після зменшення на 5 %.</li>
           <li>Залишок на початок кожного наступного року програма рахує сама: залишок на кінець попереднього року × 0,95. Ці 5 % у подальшому не враховуються (п. 140.3).</li>
+          <li><b>«± коригування»</b> у колонці «Залишок на початок» дає змогу скоригувати залишок на 01.01 року, наприклад щоб привести його у відповідність до попередніх розрахунків. Зі знаком «−» залишок зменшується, з «+» — збільшується. Коригування обов'язково потребує пояснення: його видно в контрольних процедурах і в довідці. Суми 3.1.1 і 3.2.1 при цьому мають відповідати деклараціям.</li>
           <li>За бажанням у колонці «Звірка» внесіть залишок, що випливає з поданих декларацій. Програма покаже, чи він збігається з розрахованим. Якщо розбіжність обґрунтована, опишіть причину в полі «Пояснення розбіжності».</li>
         </ul>
 

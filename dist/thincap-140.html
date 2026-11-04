@@ -160,6 +160,9 @@ td input.num{min-width:0}
 #poolTbl td input{min-width:0}
 #poolTbl{table-layout:fixed}
 #poolTbl .note-in{margin-top:6px;font-size:12px;min-height:32px;padding:5px 8px}
+#poolTbl td.n .note-in{display:block;width:100%;margin-top:6px}
+.adj-btn{display:block;margin:4px 0 0 auto;background:none;border:0;padding:2px 0;font:500 11px var(--font-sans);color:var(--muted);cursor:pointer;min-height:24px}
+.adj-btn:hover{color:var(--accent-text);text-decoration:underline}
 #poolTbl th:first-child{width:84px} #poolTbl th:last-child{width:64px}
 #poolTbl th{white-space:normal}
 @media (max-width:900px){ #poolTbl{table-layout:auto} #poolTbl td input.num{min-width:120px} }
@@ -416,6 +419,7 @@ footer.app{border-top:1px solid var(--border);color:var(--muted);font-size:11px;
           <li>Кнопки <b>«+ Додати рік на початок»</b> і <b>«+ Додати рік у кінець»</b> додають рядки; ✕ видаляє рядок.</li>
           <li>Якщо облік починається не з першого року застосування ст. 140, у рядку першого року в колонці «Залишок на початок» внесіть залишок на 01.01 цього року, вже після зменшення на 5 %.</li>
           <li>Залишок на початок кожного наступного року програма рахує сама: залишок на кінець попереднього року × 0,95. Ці 5 % у подальшому не враховуються (п. 140.3).</li>
+          <li><b>«± коригування»</b> у колонці «Залишок на початок» дає змогу скоригувати залишок на 01.01 року, наприклад щоб привести його у відповідність до попередніх розрахунків. Зі знаком «−» залишок зменшується, з «+» — збільшується. Коригування обов'язково потребує пояснення: його видно в контрольних процедурах і в довідці. Суми 3.1.1 і 3.2.1 при цьому мають відповідати деклараціям.</li>
           <li>За бажанням у колонці «Звірка» внесіть залишок, що випливає з поданих декларацій. Програма покаже, чи він збігається з розрахованим. Якщо розбіжність обґрунтована, опишіть причину в полі «Пояснення розбіжності».</li>
         </ul>
 
@@ -590,6 +594,9 @@ function runVintages(history, initial, haircut){
   const matrix = [];
   rows.forEach((r,i) => {
     if (i>0) { const f = Math.pow(1-haircut, r.year - rows[i-1].year); vint.forEach(v => v.bal *= f); }
+    { let a = num(r.adj);
+      if (a > 0) vint.push({year:"кор. "+r.year, bal:a});
+      else if (a < 0){ a = -a; for (const v of vint){ const t = Math.min(v.bal, a); v.bal -= t; a -= t; if (a<=1e-9) break; } } }
     let use = num(r.used);
     for (const v of vint){ const t = Math.min(v.bal, use); v.bal -= t; use -= t; if (use<=1e-9) break; }
     if (num(r.excess)) vint.push({year:r.year, bal:num(r.excess)});
@@ -696,7 +703,8 @@ function poolRows(Y){
   const years = [...new Set([...manual.keys(), ...calcYears])].sort((a,b)=>a-b);
   const out = []; let closing = 0, prev = null;
   years.forEach((y,i)=>{
-    const opening = i===0 ? num(S.poolInitial) : closing * Math.pow(1-h, y-prev);
+    const adj = manual.has(y) ? num(manual.get(y).adj) : 0;   // коригування залишку на 01.01 (з поясненням)
+    const opening = (i===0 ? num(S.poolInitial) : closing * Math.pow(1-h, y-prev)) + adj;
     const pid = latestPeriodIdOf(y);
     const calc = pid ? calcPeriod(S.years[String(y)].periods[pid], {...S.meta, year:y}, S.method, opening) : null;
     const row = manual.has(y)
@@ -867,6 +875,9 @@ function renderOutputs(){
       .forEach(h=>add("warn",`${h.year} рік: суми, внесені вручну (3.1.1 = ${fmt(num(h.excess))}, 3.2.1 = ${fmt(num(h.used))}), відрізняються від розрахунку в програмі (${fmt(h.calcExcess)} / ${fmt(h.calcUsed)}). Використано внесені вручну. Видаліть ручний рядок, якщо декларацію подано за розрахунком.`));
     const notAnnual = rows.filter(h=>h.source==="calc" && h.pid!=="Y").map(h=>h.year+" ("+PERIODS.find(p=>p.id===h.pid).label+")");
     if (notAnnual.length) add("warn","Для "+notAnnual.join(", ")+" немає річного розрахунку: у перенесення взято останній заповнений період. Заповніть період «Рік».");
+    rows.filter(x=>x.source==="manual" && Math.abs(num(x.adj))>0.005).forEach(x=>{ const n = String(x.note||"").trim();
+      if (n) add("warn",`Коригування залишку на 01.01.${x.year}: ${fmt(num(x.adj))} грн — ${esc(n)}`);
+      else add("err",`Коригування залишку на 01.01.${x.year} (${fmt(num(x.adj))} грн) без пояснення. Додайте пояснення на вкладці «Перенесення».`); });
     const negY = rows.filter(x=>x.closing < -0.005).map(x=>x.year);
     if (negY.length) add("err","Від'ємний залишок перенесених процентів на кінець "+negY.join(", ")+" року: використано більше, ніж було накопичено. Перевірте суми 3.2.1.");
     rows.filter(x=>x.diff!=null && Math.abs(x.diff)>0.5).forEach(x=>{ const n = String(x.note||"").trim();
@@ -913,15 +924,18 @@ function renderPool(){
   let html = M.pool.map(x=>{
     const op = x.year===firstYear ? openIn() : fmt(x.opening);
     if (x.source==="manual"){ const i = x.idx, h = S.history[i];
+      const adjIn = (num(h.adj) || h.showAdj)
+        ? `<input class="num note-in" data-h="${i}" data-f="adj" value="${fmtIn(h.adj)}" placeholder="коригування" title="Коригування залишку на 01.01.${h.year}: «−» зменшує, «+» збільшує. Потребує пояснення." aria-label="Коригування залишку ${h.year}">`
+        : `<button class="adj-btn noprint" data-showadj="${i}" title="Додати коригування залишку на 01.01.${h.year}">± коригування</button>`;
       const calcNote = x.calcExcess!=null ? `<div class="src">У програмі: 3.1.1 = ${fmt(x.calcExcess)}, 3.2.1 = ${fmt(x.calcUsed)}</div>` : "";
       return `<tr>
       <td><input class="num" style="min-width:70px" data-h="${i}" data-f="year" value="${h.year}"><div class="src">з декларації</div></td>
-      <td class="n">${op}</td>
+      <td class="n"><div>${op}</div>${adjIn}${num(h.adj)?`<div class="src">до коригування: ${fmt(x.opening-num(h.adj))}</div>`:""}</td>
       <td><input class="num" data-h="${i}" data-f="excess" value="${fmtIn(h.excess)}">${calcNote}</td>
       <td><input class="num" data-h="${i}" data-f="used" value="${fmtIn(h.used)}"></td>
       <td class="n">${fmt(x.closing)}</td>
       <td><input class="num" data-h="${i}" data-f="control" value="${h.control==null?'':fmtIn(h.control)}" aria-label="Звірка ${h.year}">
-        ${(x.diff!=null && Math.abs(x.diff)>0.5) || h.note ? `<input class="note-in" data-h="${i}" data-f="note" value="${esc(h.note||'')}" placeholder="Пояснення розбіжності" aria-label="Пояснення розбіжності ${h.year}">` : ''}</td>
+        ${(x.diff!=null && Math.abs(x.diff)>0.5) || h.note || num(h.adj) ? `<input class="note-in" data-h="${i}" data-f="note" value="${esc(h.note||'')}" placeholder="Пояснення розбіжності" aria-label="Пояснення розбіжності ${h.year}">` : ''}</td>
       <td class="n">${badge(x)}</td>
       <td class="noprint"><button class="btn icon ghost" data-delh="${i}" aria-label="Видалити рік ${h.year}">✕</button></td></tr>`; }
     const lbl = PERIODS.find(p=>p.id===x.pid).label;
@@ -992,6 +1006,7 @@ document.addEventListener("click", e => {
   if (t.dataset.recalc!=null) return recalc();
   if (t.id==="addDebt"){ const p=S.periods[S.active]; p.debts.push(emptyDebt()); persist(); renderInputs(); renderOutputs(); return; }
   if (t.dataset.deldebt!=null){ const p=S.periods[S.active]; p.debts.splice(+t.dataset.deldebt,1); if(!p.debts.length) p.debts.push(emptyDebt()); persist(); renderInputs(); renderOutputs(); return; }
+  if (t.dataset.showadj!=null){ S.history[+t.dataset.showadj].showAdj = true; renderPool(); return; }
   if (t.dataset.goyear){ S.meta.year = num(t.dataset.goyear); persist(); renderAll();
     document.querySelector('#tabs [data-tab="calc"]').click(); return; }
   if (t.id==="addYearFirst"){ const ys = model().pool.map(x=>x.year); const y = (ys.length?Math.min(...ys):num(S.meta.year))-1;
@@ -1075,8 +1090,10 @@ function printWorkingPaper(mode){
   const M = model();
   const pids = mode==="all" ? PERIODS.filter(x=>S.periods[x.id].enabled).map(x=>x.id) : [S.active];
   if (!pids.length || !M.results[pids[0]]){ alert("Період не заповнено: немає що друкувати."); return; }
-  const fn = [];
-  const pool = M.pool.map(x=>`<tr><td class="c">${x.year}${x.auto?"*":""}</td><td class="n">${fmt(x.opening)}</td><td class="n">${fmt(x.excess)}</td><td class="n">${fmt(x.used)}</td><td class="n">${fmt(x.closing)}</td><td class="n">${x.control==null?"—":fmt(num(x.control))}</td><td class="n">${x.diff==null?"—":fmt(x.diff)}</td><td class="c">${x.note? "прим. "+fn.push(x.year+": "+x.note) : "—"}</td></tr>`).join("");
+  const fn = [], fnNo = {};
+  M.pool.forEach(x=>{ const a = Math.abs(num(x.adj))>0.005;
+    if (a || x.note) fnNo[x.year] = fn.push(x.year+": "+(a?"коригування залишку на 01.01 "+fmt(num(x.adj))+" грн"+(x.note?" — ":""):"")+(x.note||"")); });
+  const pool = M.pool.map(x=>`<tr><td class="c">${x.year}${x.auto?"*":""}</td><td class="n">${fmt(x.opening)}</td><td class="n">${fmt(x.excess)}</td><td class="n">${fmt(x.used)}</td><td class="n">${fmt(x.closing)}</td><td class="n">${x.control==null?"—":fmt(num(x.control))}</td><td class="n">${x.diff==null?"—":fmt(x.diff)}</td><td class="c">${fnNo[x.year] ? "прим. "+fnNo[x.year] : "—"}</td></tr>`).join("");
   const m = S.method;
   const today = new Date().toLocaleDateString("uk-UA",{day:"2-digit",month:"2-digit",year:"numeric"});
   const dd = S.meta.docDate ? new Date(S.meta.docDate+"T00:00:00").toLocaleDateString("uk-UA",{day:"2-digit",month:"2-digit",year:"numeric"}) : "____________";
@@ -1098,7 +1115,7 @@ function printWorkingPaper(mode){
    ${pids.map((id,i)=>periodSection(id,i+1)).join('<div style="break-before:page"></div>')}
    <h2>${pids.length+1}. Перенесення процентів (п. 140.3)</h2>
    <table><thead><tr><th class="c">Рік</th><th class="n">На початок (після −5 %), грн</th><th class="n">3.1.1 (+), грн</th><th class="n">3.2.1 (−), грн</th><th class="n">На кінець, грн</th><th class="n">За декларацією, грн</th><th class="n">Розбіжність, грн</th><th>Пояснення</th></tr></thead><tbody>${pool}</tbody></table>
-   ${fn.length?`<div class="small"><b>Пояснення розбіжностей:</b> ${fn.map((t,k)=>`прим. ${k+1} — ${esc(t)}`).join("; ")}.</div>`:""}
+   ${fn.length?`<div class="small"><b>Примітки:</b> ${fn.map((t,k)=>`прим. ${k+1} — ${esc(t)}`).join("; ")}.</div>`:""}
    <div class="small">* Рядок звітного року сформовано за останнім заповненим періодом. Від'ємні значення наведено в дужках.</div>
    <div class="sig">
      <div><div class="sig-role">Виконавець</div><div class="sig-line">____________________</div><div class="sig-name">${esc(S.meta.preparer||"(ПІБ)")}</div></div>
