@@ -268,8 +268,8 @@ footer.app{border-top:1px solid var(--border);color:var(--muted);font-size:11px;
         <div class="debts" id="debts"></div>
         <div class="toolbar noprint" style="margin:10px 0 0;align-items:center">
           <button class="btn" id="addDebt">+ Додати кредитора / договір</button>
-          <button class="btn primary" id="btnRecalc">↻ Перерахувати</button>
-          <span class="recalc-msg" id="recalcMsg" role="status" aria-live="polite"></span>
+          <button class="btn primary" data-recalc>↻ Перерахувати</button>
+          <span class="recalc-msg" role="status" aria-live="polite"></span>
         </div>
         <div class="sum" id="debtSum"></div>
         <div class="grid">
@@ -295,7 +295,9 @@ footer.app{border-top:1px solid var(--border);color:var(--muted);font-size:11px;
       </section>
 
       <section class="card">
-        <h2 style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">3. Результат <button class="btn primary noprint" data-wp="cur">🖨 Друк робочого документа</button></h2>
+        <h2 style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">3. Результат
+          <span class="toolbar noprint" style="margin:0"><button class="btn primary" data-recalc>↻ Перерахувати</button><button class="btn primary" data-wp="cur">🖨 Друк робочого документа</button></span></h2>
+        <p class="recalc-msg noprint" role="status" aria-live="polite" style="margin:-4px 0 10px"></p>
         <div class="kpis" id="kpis"></div>
         <h3>Хід розрахунку</h3>
         <div class="tbl-wrap"><table id="traceTbl"><thead><tr><th class="c">№</th><th>Показник</th><th>Формула</th><th class="n">Сума, грн</th></tr></thead><tbody></tbody></table></div>
