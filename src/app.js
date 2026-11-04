@@ -328,6 +328,7 @@ document.addEventListener("input", e => {
     h[f] = (f==="control" && t.value.trim()==="") ? null : num(t.value); }
   else return;
   persist(); renderOutputs();
+  const m = document.getElementById("recalcMsg"); if (m) m.textContent = "";
 });
 document.addEventListener("change", e => {
   const t = e.target;
@@ -344,6 +345,7 @@ document.addEventListener("click", e => {
   if (t.dataset.tab){ document.querySelectorAll("#tabs button").forEach(b=>b.setAttribute("aria-selected", String(b===t)));
     document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("hidden", x.id!=="tab-"+t.dataset.tab)); renderAll(); return; }
   if (t.dataset.period){ S.active = t.dataset.period; persist(); renderAll(); return; }
+  if (t.id==="btnRecalc") return recalc();
   if (t.id==="addDebt"){ const p=S.periods[S.active]; p.debts.push(emptyDebt()); persist(); renderInputs(); renderOutputs(); return; }
   if (t.dataset.deldebt!=null){ const p=S.periods[S.active]; p.debts.splice(+t.dataset.deldebt,1); if(!p.debts.length) p.debts.push(emptyDebt()); persist(); renderInputs(); renderOutputs(); return; }
   if (t.id==="addYear"){ const ys=S.history.map(h=>h.year); const y = ys.length?Math.max(...ys)+1:num(S.meta.year)-1; S.history.push({year:y,excess:0,used:0,control:null}); persist(); renderPool(); return; }
@@ -457,6 +459,17 @@ function printWorkingPaper(mode){
   setTimeout(()=>window.print(), 50);
 }
 
+/* Явний перерахунок: фіксує поле, що редагується, нормалізує числа і оновлює всі вкладки */
+function recalc(){
+  const a = document.activeElement;
+  if (a && a.classList && a.classList.contains("num")) a.value = fmtIn(num(a.value));
+  persist(); renderAll();
+  const r = model().results[S.active], msg = $("#recalcMsg");
+  const tm = new Date().toLocaleTimeString("uk-UA",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+  msg.textContent = r ? `Перераховано о ${tm}: кредиторів ${S.periods[S.active].debts.length}; 3.1.1 = ${fmt(r.excess)} грн; 3.2.1 = ${fmt(r.decrease)} грн`
+                      : `Період не заповнено: позначте «період заповнено» (${tm})`;
+  document.querySelectorAll("#kpis .kpi, #debtSum .kpi").forEach(k=>{ k.classList.remove("flash"); void k.offsetWidth; k.classList.add("flash"); });
+}
 function renderCase(){
   const box = document.getElementById("caseNotes"); if (!box) return;
   const has = !!(CASE && CASE.notesHtml);

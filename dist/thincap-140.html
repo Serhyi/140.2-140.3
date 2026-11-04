@@ -94,6 +94,10 @@ nav.tabs button[aria-selected="true"]{color:var(--accent-text);border-bottom-col
 .btn.gold:hover{background:var(--gold-bg-h)}
 .btn.ghost:hover{background:var(--tint)}
 .btn.icon{min-width:44px;padding:8px}
+.recalc-msg{font-size:13px;color:var(--ok-tx)}
+.recalc-msg:empty{display:none}
+@keyframes flash{from{box-shadow:0 0 0 3px var(--accent)}to{box-shadow:0 0 0 0 transparent}}
+.flash{animation:flash 1.2s ease-out}
 .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
 
 main{padding:4px 0 48px}
@@ -279,7 +283,11 @@ footer.app{border-top:1px solid var(--border);color:var(--muted);font-size:11px;
         <h2>1. Реєстр боргових зобов'язань перед нерезидентами і тест «3,5 раза»</h2>
         <p class="lead">Боргові зобов'язання за п. 140.1: кредити, позики, депозити, РЕПО, фінансовий лізинг та інші запозичення незалежно від їх оформлення, разом із нарахованими процентами. До тесту включаються <b>всі</b> нерезиденти, зокрема іноземні банки. Проценти перед іноземними банками і МФО з державною гарантією, а також суми, скориговані за ст. 39, з СП виключаються (абз. 7–8 п. 140.2).</p>
         <div class="debts" id="debts"></div>
-        <div class="toolbar noprint" style="margin:10px 0 0"><button class="btn" id="addDebt">+ Додати кредитора / договір</button></div>
+        <div class="toolbar noprint" style="margin:10px 0 0;align-items:center">
+          <button class="btn" id="addDebt">+ Додати кредитора / договір</button>
+          <button class="btn primary" id="btnRecalc">↻ Перерахувати</button>
+          <span class="recalc-msg" id="recalcMsg" role="status" aria-live="polite"></span>
+        </div>
         <div class="sum" id="debtSum"></div>
         <div class="grid">
           <label class="f">Власний капітал на початок періоду, грн<input class="num" data-p="eqOpen" inputmode="decimal"><span class="src">Ф1, р. 1495, гр. 3</span></label>
@@ -747,6 +755,7 @@ document.addEventListener("input", e => {
     h[f] = (f==="control" && t.value.trim()==="") ? null : num(t.value); }
   else return;
   persist(); renderOutputs();
+  const m = document.getElementById("recalcMsg"); if (m) m.textContent = "";
 });
 document.addEventListener("change", e => {
   const t = e.target;
@@ -763,6 +772,7 @@ document.addEventListener("click", e => {
   if (t.dataset.tab){ document.querySelectorAll("#tabs button").forEach(b=>b.setAttribute("aria-selected", String(b===t)));
     document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("hidden", x.id!=="tab-"+t.dataset.tab)); renderAll(); return; }
   if (t.dataset.period){ S.active = t.dataset.period; persist(); renderAll(); return; }
+  if (t.id==="btnRecalc") return recalc();
   if (t.id==="addDebt"){ const p=S.periods[S.active]; p.debts.push(emptyDebt()); persist(); renderInputs(); renderOutputs(); return; }
   if (t.dataset.deldebt!=null){ const p=S.periods[S.active]; p.debts.splice(+t.dataset.deldebt,1); if(!p.debts.length) p.debts.push(emptyDebt()); persist(); renderInputs(); renderOutputs(); return; }
   if (t.id==="addYear"){ const ys=S.history.map(h=>h.year); const y = ys.length?Math.max(...ys)+1:num(S.meta.year)-1; S.history.push({year:y,excess:0,used:0,control:null}); persist(); renderPool(); return; }
@@ -876,6 +886,17 @@ function printWorkingPaper(mode){
   setTimeout(()=>window.print(), 50);
 }
 
+/* Явний перерахунок: фіксує поле, що редагується, нормалізує числа і оновлює всі вкладки */
+function recalc(){
+  const a = document.activeElement;
+  if (a && a.classList && a.classList.contains("num")) a.value = fmtIn(num(a.value));
+  persist(); renderAll();
+  const r = model().results[S.active], msg = $("#recalcMsg");
+  const tm = new Date().toLocaleTimeString("uk-UA",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+  msg.textContent = r ? `Перераховано о ${tm}: кредиторів ${S.periods[S.active].debts.length}; 3.1.1 = ${fmt(r.excess)} грн; 3.2.1 = ${fmt(r.decrease)} грн`
+                      : `Період не заповнено: позначте «період заповнено» (${tm})`;
+  document.querySelectorAll("#kpis .kpi, #debtSum .kpi").forEach(k=>{ k.classList.remove("flash"); void k.offsetWidth; k.classList.add("flash"); });
+}
 function renderCase(){
   const box = document.getElementById("caseNotes"); if (!box) return;
   const has = !!(CASE && CASE.notesHtml);

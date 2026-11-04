@@ -87,6 +87,10 @@ nav.tabs button[aria-selected="true"]{color:var(--accent-text);border-bottom-col
 .btn.gold:hover{background:var(--gold-bg-h)}
 .btn.ghost:hover{background:var(--tint)}
 .btn.icon{min-width:44px;padding:8px}
+.recalc-msg{font-size:13px;color:var(--ok-tx)}
+.recalc-msg:empty{display:none}
+@keyframes flash{from{box-shadow:0 0 0 3px var(--accent)}to{box-shadow:0 0 0 0 transparent}}
+.flash{animation:flash 1.2s ease-out}
 .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
 
 main{padding:4px 0 48px}
@@ -262,7 +266,11 @@ footer.app{border-top:1px solid var(--border);color:var(--muted);font-size:11px;
         <h2>1. Реєстр боргових зобов'язань перед нерезидентами і тест «3,5 раза»</h2>
         <p class="lead">Боргові зобов'язання за п. 140.1: кредити, позики, депозити, РЕПО, фінансовий лізинг та інші запозичення незалежно від їх оформлення, разом із нарахованими процентами. До тесту включаються <b>всі</b> нерезиденти, зокрема іноземні банки. Проценти перед іноземними банками і МФО з державною гарантією, а також суми, скориговані за ст. 39, з СП виключаються (абз. 7–8 п. 140.2).</p>
         <div class="debts" id="debts"></div>
-        <div class="toolbar noprint" style="margin:10px 0 0"><button class="btn" id="addDebt">+ Додати кредитора / договір</button></div>
+        <div class="toolbar noprint" style="margin:10px 0 0;align-items:center">
+          <button class="btn" id="addDebt">+ Додати кредитора / договір</button>
+          <button class="btn primary" id="btnRecalc">↻ Перерахувати</button>
+          <span class="recalc-msg" id="recalcMsg" role="status" aria-live="polite"></span>
+        </div>
         <div class="sum" id="debtSum"></div>
         <div class="grid">
           <label class="f">Власний капітал на початок періоду, грн<input class="num" data-p="eqOpen" inputmode="decimal"><span class="src">Ф1, р. 1495, гр. 3</span></label>
