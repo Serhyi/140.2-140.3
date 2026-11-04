@@ -1177,10 +1177,7 @@ function printWorkingPaper(mode){
   const M = model();
   const pids = mode==="all" ? PERIODS.filter(x=>filled(S.periods[x.id])).map(x=>x.id) : [S.active];
   if (!pids.length || !M.results[pids[0]]){ alert("Період не заповнено: немає що друкувати."); return; }
-  const fn = [], fnNo = {};
-  M.pool.forEach(x=>{ const a = Math.abs(num(x.adj))>0.005;
-    if (a || x.note) fnNo[x.year] = fn.push(x.year+": "+(a?"коригування залишку на 01.01 "+fmt(num(x.adj))+" грн"+(x.note?" — ":""):"")+(x.note||"")); });
-  const pool = M.pool.map(x=>`<tr><td class="c">${x.year}${x.auto?"*":""}</td><td class="n">${fmt(x.opening)}</td><td class="n">${fmt(x.excess)}</td><td class="n">${fmt(x.used)}</td><td class="n">${fmt(x.closing)}</td><td class="n">${x.control==null?"—":fmt(num(x.control))}</td><td class="n">${x.diff==null?"—":fmt(x.diff)}</td><td class="c">${fnNo[x.year] ? "прим. "+fnNo[x.year] : "—"}</td></tr>`).join("");
+  const pool = M.pool.map(x=>`<tr><td class="c">${x.year}${x.auto?"*":""}</td><td class="n">${fmt(x.opening)}</td><td class="n">${fmt(x.excess)}</td><td class="n">${fmt(x.used)}</td><td class="n">${fmt(x.closing)}</td><td class="n">${x.control==null?"—":fmt(num(x.control))}</td><td class="n">${x.diff==null?"—":fmt(x.diff)}</td></tr>`).join("");
   const m = S.method;
   const today = new Date().toLocaleDateString("uk-UA",{day:"2-digit",month:"2-digit",year:"numeric"});
   const dd = S.meta.docDate ? new Date(S.meta.docDate+"T00:00:00").toLocaleDateString("uk-UA",{day:"2-digit",month:"2-digit",year:"numeric"}) : "____________";
@@ -1201,8 +1198,7 @@ function printWorkingPaper(mode){
    </tbody></table>
    ${pids.map((id,i)=>periodSection(id,i+1)).join('<div style="break-before:page"></div>')}
    <h2>${pids.length+1}. Перенесення процентів (п. 140.3)</h2>
-   <table><thead><tr><th class="c">Рік</th><th class="n">На початок (після −5 %), грн</th><th class="n">3.1.1 (+), грн</th><th class="n">3.2.1 (−), грн</th><th class="n">На кінець, грн</th><th class="n">За декларацією, грн</th><th class="n">Розбіжність, грн</th><th>Пояснення</th></tr></thead><tbody>${pool}</tbody></table>
-   ${fn.length?`<div class="small"><b>Примітки:</b> ${fn.map((t,k)=>`прим. ${k+1} — ${esc(t)}`).join("; ")}.</div>`:""}
+   <table><thead><tr><th class="c">Рік</th><th class="n">На початок (після −5 %), грн</th><th class="n">3.1.1 (+), грн</th><th class="n">3.2.1 (−), грн</th><th class="n">На кінець, грн</th><th class="n">За декларацією, грн</th><th class="n">Розбіжність, грн</th></tr></thead><tbody>${pool}</tbody></table>
    <div class="small">* Рядок звітного року сформовано за останнім заповненим періодом. Від'ємні значення наведено в дужках.</div>
    <div class="sig">
      <div><div class="sig-role">Виконавець</div><div class="sig-line">____________________</div><div class="sig-name">${esc(S.meta.preparer||"(ПІБ)")}</div></div>
