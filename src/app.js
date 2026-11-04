@@ -280,7 +280,9 @@ function renderOutputs(){
   if (p.debts.some(d=>!String(d.name).trim())) add("warn","Є рядки боргу без кредитора: для тесту потрібні <b>всі</b> нерезиденти (п. 140.1).");
   if (p.debts.length<=2 && new Set(p.debts.map(d=>d.name)).size<=1) add("warn","У тест включено одного кредитора. Підтвердіть повноту переліку боргових зобов'язань перед нерезидентами (ОСВ 50/55/60/68, позики, фінансова допомога).");
   const prevCtl = runPool(priorHistory(), S.poolInitial, S.method.haircut).filter(x=>x.diff!=null && Math.abs(x.diff)>0.5);
-  prevCtl.forEach(x=>add("err",`Залишок пулу на кінець ${x.year} року не збігається з даними платника: розбіжність ${fmt(x.diff)} грн (див. «Перенесення»).`));
+  prevCtl.forEach(x=>{ const n = String(x.note||"").trim();
+    if (n) add("warn",`Залишок пулу на кінець ${x.year} року відрізняється від даних платника на ${fmt(x.diff)} грн — пояснено: ${esc(n)}`);
+    else add("err",`Залишок пулу на кінець ${x.year} року не збігається з даними платника: розбіжність ${fmt(x.diff)} грн. Додайте пояснення на вкладці «Перенесення» або виправте дані.`); });
   { const ys = priorHistory().map(h=>h.year).sort((a,b)=>a-b), gaps = [];
     for (let i=1;i<ys.length;i++) for (let y=ys[i-1]+1;y<ys[i];y++) gaps.push(y);
     if (ys.length && ys[ys.length-1] < num(S.meta.year)-1) for (let y=ys[ys.length-1]+1;y<num(S.meta.year);y++) gaps.push(y);
@@ -309,8 +311,9 @@ function renderPool(){
       <td><input class="num" data-h="${idx}" data-f="excess" value="${fmtIn(h.excess)}"></td>
       <td><input class="num" data-h="${idx}" data-f="used" value="${fmtIn(h.used)}"></td>
       <td class="n">${future?'ігнорується (≥ звітного року)':fmt(x.closing)}</td>
-      <td><input class="num" data-h="${idx}" data-f="control" value="${h.control==null?'':fmtIn(h.control)}"></td>
-      <td class="n">${x.diff==null?'—':(Math.abs(x.diff)>0.5?`<span class="badge b-err">Розбіжність</span><br>${fmt(x.diff)}`:`<span class="badge b-ok">Збігається</span>`)}</td>
+      <td><input class="num" data-h="${idx}" data-f="control" value="${h.control==null?'':fmtIn(h.control)}" aria-label="Контроль ${h.year}">
+        ${(x.diff!=null && Math.abs(x.diff)>0.5) || h.note ? `<input class="note-in" data-h="${idx}" data-f="note" value="${esc(h.note||'')}" placeholder="Пояснення розбіжності" aria-label="Пояснення розбіжності ${h.year}">` : ''}</td>
+      <td class="n">${x.diff==null?'—':(Math.abs(x.diff)>0.5?(h.note?`<span class="badge b-info" title="${esc(h.note)}">Пояснено</span><br>${fmt(x.diff)}`:`<span class="badge b-err">Розбіжність</span><br>${fmt(x.diff)}`):`<span class="badge b-ok">Збігається</span>`)}</td>
       <td class="noprint"><button class="btn icon ghost" data-delh="${idx}" aria-label="Видалити рік ${h.year}">✕</button></td></tr>`;}).join("");
   const cur = byYear[cy];
   if (cur && M.lp) html += `<tr class="cur"><td>${cy}</td><td class="n">${cy===firstYear?openIn():fmt(cur.opening)}</td><td class="n">${fmt(cur.excess)}</td><td class="n">${fmt(cur.used)}</td><td class="n">${fmt(cur.closing)}</td><td colspan="3" class="muted">з розрахунку: ${PERIODS.find(p=>p.id===M.lp).label}</td></tr>`;
@@ -342,7 +345,7 @@ document.addEventListener("input", e => {
   else if (t.dataset.mm && t.type!=="checkbox"){ S.method[t.dataset.mm] = num(t.value); }
   else if (t.id==="poolInitial"){ S.poolInitial = num(t.value); }
   else if (t.dataset.h!=null){ const h=S.history[+t.dataset.h]; const f=t.dataset.f;
-    h[f] = (f==="control" && t.value.trim()==="") ? null : num(t.value); }
+    h[f] = f==="note" ? t.value : (f==="control" && t.value.trim()==="") ? null : num(t.value); }
   else return;
   persist(); renderOutputs();
   document.querySelectorAll(".recalc-msg").forEach(m => m.textContent = "");
@@ -397,8 +400,8 @@ function exportXlsx(){
     ["Зменшення при невиконаному тесті",S.method.decreaseWhenTestFails?"так":"ні"],["Підготував",S.meta.preparer],["Перевірив",S.meta.reviewer],
     ["Сформовано",new Date().toLocaleString("uk-UA")]];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(meta), "Параметри");
-  const pool = [["Рік","Залишок на початок (після −5%)","3.1.1 (+)","3.2.1 (−)","Залишок на кінець","Контроль платника","Розбіжність"]]
-    .concat(M.pool.map(x=>[x.year, r2(x.opening), r2(x.excess), r2(x.used), r2(x.closing), x.control==null?"":x.control, x.diff==null?"":r2(x.diff)]));
+  const pool = [["Рік","Залишок на початок (після −5%)","3.1.1 (+)","3.2.1 (−)","Залишок на кінець","Контроль платника","Розбіжність","Пояснення"]]
+    .concat(M.pool.map(x=>[x.year, r2(x.opening), r2(x.excess), r2(x.used), r2(x.closing), x.control==null?"":x.control, x.diff==null?"":r2(x.diff), x.note||""]));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(pool), "Перенесення");
   PERIODS.forEach(pd=>{ const r = M.results[pd.id]; if(!r) return; const p=S.periods[pd.id];
     const a = [["Період", pd.label+" "+S.meta.year],[],["Кредитор","Рахунок","Категорія","Початок","Кінець","Середнє","Проценти","Коригування ст. 39"]]
@@ -446,7 +449,7 @@ function printWorkingPaper(mode){
   const M = model();
   const pids = mode==="all" ? PERIODS.filter(x=>S.periods[x.id].enabled).map(x=>x.id) : [S.active];
   if (!pids.length || !M.results[pids[0]]){ alert("Період не заповнено: немає що друкувати."); return; }
-  const pool = M.pool.map(x=>`<tr><td class="c">${x.year}${x.auto?"*":""}</td><td class="n">${fmt(x.opening)}</td><td class="n">${fmt(x.excess)}</td><td class="n">${fmt(x.used)}</td><td class="n">${fmt(x.closing)}</td><td class="n">${x.control==null?"—":fmt(num(x.control))}</td><td class="n">${x.diff==null?"—":fmt(x.diff)}</td></tr>`).join("");
+  const pool = M.pool.map(x=>`<tr><td class="c">${x.year}${x.auto?"*":""}</td><td class="n">${fmt(x.opening)}</td><td class="n">${fmt(x.excess)}</td><td class="n">${fmt(x.used)}</td><td class="n">${fmt(x.closing)}</td><td class="n">${x.control==null?"—":fmt(num(x.control))}</td><td class="n">${x.diff==null?"—":fmt(x.diff)}</td><td>${esc(x.note||"")||"—"}</td></tr>`).join("");
   const m = S.method, logo = $("#logoTpl").innerHTML;
   const today = new Date().toLocaleDateString("uk-UA",{day:"2-digit",month:"2-digit",year:"numeric"});
   $("#printArea").innerHTML = `
@@ -466,7 +469,7 @@ function printWorkingPaper(mode){
    </tbody></table>
    ${pids.map((id,i)=>periodSection(id,i+1)).join('<div style="break-before:page"></div>')}
    <h2>${pids.length+1}. Перенесення процентів (п. 140.3)</h2>
-   <table><thead><tr><th class="c">Рік</th><th class="n">На початок (після −5 %), грн</th><th class="n">3.1.1 (+), грн</th><th class="n">3.2.1 (−), грн</th><th class="n">На кінець, грн</th><th class="n">За даними платника, грн</th><th class="n">Розбіжність, грн</th></tr></thead><tbody>${pool}</tbody></table>
+   <table><thead><tr><th class="c">Рік</th><th class="n">На початок (після −5 %), грн</th><th class="n">3.1.1 (+), грн</th><th class="n">3.2.1 (−), грн</th><th class="n">На кінець, грн</th><th class="n">За даними платника, грн</th><th class="n">Розбіжність, грн</th><th>Пояснення</th></tr></thead><tbody>${pool}</tbody></table>
    <div class="small">* Рядок звітного року сформовано за останнім заповненим періодом. Від'ємні значення наведено в дужках.</div>
    <div class="sig"><div>Підготував: ${esc(S.meta.preparer||"")}<br>Дата ____________ Підпис ____________</div>
    <div>Перевірив: ${esc(S.meta.reviewer||"")}<br>Дата ____________ Підпис ____________</div></div>
