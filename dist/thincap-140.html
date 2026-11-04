@@ -183,6 +183,7 @@ ul.checks li .tag{font:700 11px/1.8 var(--font-sans);letter-spacing:.08em;text-t
 ul.checks li.ok{background:var(--ok-bg);border-color:var(--ok-bd)} ul.checks li.ok .tag{color:var(--ok-tx)}
 ul.checks li.warn{background:var(--warn-bg);border-color:var(--warn-bd)} ul.checks li.warn .tag{color:var(--warn-tx)}
 ul.checks li.err{background:var(--err-bg);border-color:var(--err-bd)} ul.checks li.err .tag{color:var(--err-tx)}
+ul.checks li.info{background:var(--info-bg);border-color:var(--info-bd)} ul.checks li.info .tag{color:var(--info-tx)}
 @media (max-width:520px){ ul.checks li{grid-template-columns:1fr;gap:2px} }
 .note-info{background:var(--info-bg);color:var(--text);border-left:4px solid var(--info-bd);padding:10px 12px;border-radius:var(--radius-sm);font-size:13px}
 .hidden{display:none!important}
@@ -231,7 +232,7 @@ footer.app{border-top:1px solid var(--border);color:var(--muted);font-size:11px;
 #printArea ul{margin:2pt 0;padding-left:0;list-style:none}
 #printArea ul li{display:grid;grid-template-columns:30mm 1fr;gap:3mm;margin:3pt 0;font-size:9pt;break-inside:avoid}
 #printArea ul li .tag{font:700 7.5pt/1.6 var(--font-sans);letter-spacing:.06em;text-transform:uppercase}
-#printArea ul li[data-lvl="ok"] .tag{color:#006B3C} #printArea ul li[data-lvl="warn"] .tag{color:#B45309} #printArea ul li[data-lvl="err"] .tag{color:#B91C1C}
+#printArea ul li[data-lvl="ok"] .tag{color:#006B3C} #printArea ul li[data-lvl="warn"] .tag{color:#B45309} #printArea ul li[data-lvl="err"] .tag{color:#B91C1C} #printArea ul li[data-lvl="info"] .tag{color:#1D4ED8}
 #printArea .sig{display:grid;grid-template-columns:1fr 1fr;gap:12mm;margin-top:14mm;break-inside:avoid}
 #printArea .sig > div{font-size:9.5pt}
 #printArea .small{font-size:8pt;color:#475569}
@@ -328,6 +329,7 @@ footer.app{border-top:1px solid var(--border);color:var(--muted);font-size:11px;
 
       <section class="card">
         <h2>4. Контрольні процедури</h2>
+        <p id="checksSum" style="margin:-2px 0 10px"></p>
         <ul class="checks" id="checks"></ul>
       </section>
     </div>
@@ -709,7 +711,7 @@ function renderOutputs(){
   p.debts.forEach((d,i)=>{ const c = document.querySelector(`[data-avg="${i}"]`); if (c) c.textContent = fmt((num(d.open)+num(d.close))/2); });
   if (!r){
     $("#debtSum").innerHTML = ""; $("#spOut").textContent = "—"; $("#testOut").innerHTML = `<span class="badge b-info">Інформація</span> Період не заповнено: позначте «період заповнено».`;
-    $("#kpis").innerHTML = ""; $("#traceTbl tbody").innerHTML = ""; $("#checks").innerHTML = ""; return;
+    $("#kpis").innerHTML = ""; $("#traceTbl tbody").innerHTML = ""; $("#checks").innerHTML = ""; { const z=document.getElementById("checksSum"); if (z) z.innerHTML=""; } return;
   }
   const kp = (l,v,key) => `<div class="kpi${key?' key':''}"><div class="lbl">${l}</div><div class="res">${v}</div></div>`;
   $("#debtSum").innerHTML = kp("Середній борг перед нерезидентами, грн", fmt(r.debtAvg), true)
@@ -748,40 +750,90 @@ function renderOutputs(){
   ];
   $("#traceTbl tbody").innerHTML = rows.map(x=>`<tr><td class="c">${x[0]}</td><td>${esc(x[1])}</td><td class="formula">${esc(x[2])}</td><td class="n">${x[3]==null?"—":fmt(x[3])}</td></tr>`).join("");
 
-  // checks — статус завжди дублюється словом (розд. 07)
+  // checks — статус завжди дублюється словом (розд. 07); рівні: err > warn > info > ok
   const ch = [];
-  const TAG = {ok:"Успішно", warn:"Попередження", err:"Помилка"};
-  const add = (lvl,t)=>ch.push(`<li class="${lvl}" data-lvl="${lvl}"><span class="tag">${TAG[lvl]}</span><span class="tx">${t}</span></li>`);
-  if (r.negative && r.SP>0) add("warn",(r.rg==="pre2021"?"Сума ФРО + ФВ + АВ ≤ 0":r.rg==="y2021early"?"Показник 0,3 × ООПП + ФВ + АВ ≤ 0":"Показник ООПП + ФВ + АВ ≤ 0")+". ФРО збільшується на <b>всю</b> суму процентів, зменшення за 3.2.1 не виникає.");
-  if (r.rg==="pre2021") add("warn","Застосовано редакцію до 01.01.2021: тест і СП лише щодо <b>пов'язаних</b> осіб-нерезидентів; ліміт 50 % від ФРО + ФВ + АВ; АВ — за даними <b>фінансової</b> звітності; для фінустанов і лізингових компаній поріг 10 раз.");
-  if (num(S.meta.year)===2021) add("warn", r.rg==="y2021early" ? "2021 рік, ранній підхід ДПС (0,3 × ООПП + ФВ + АВ). З 09.2021 ДПС вимагає 0,3 × (ООПП + ФВ + АВ); річна декларація за 2021 рік подавалась уже після зміни позиції. Оцініть податковий ризик і наявність захисту за ст. 53 ПКУ." : "2021 рік: розраховано за позицією ДПС з 09.2021. Якщо платник декларував за раннім підходом (0,3 × ООПП + ФВ + АВ), перерахуйте з відповідною редакцією й оцініть різницю.");
-  if (r.notApplicable) add("ok","Фінансова установа / компанія, що займається виключно лізингом: різниці за п. 140.2 не визначаються. Підтвердіть статус: ліцензія, реєстр фінансових установ, виключність лізингової діяльності.");
-  if (r.grossInt > num(p.fv) + 0.5) add("err","Проценти перед нерезидентами ("+fmt(r.grossInt)+") більші за фінансові витрати Ф2 ("+fmt(num(p.fv))+"). Перевірте класифікацію або капіталізацію.");
-  else add("ok","Проценти перед нерезидентами ≤ ФВ: вони вписуються у фінансові витрати Ф2.");
+  const TAG = {err:"Помилка", warn:"Попередження", info:"Інформація", ok:"Успішно"};
+  const add = (lvl,t)=>ch.push({lvl, html:`<li class="${lvl}" data-lvl="${lvl}"><span class="tag">${TAG[lvl]}</span><span class="tx">${t}</span></li>`});
+  const Y = num(S.meta.year), capTxt = pct(r.cap);
+  const DL = p.debts, nz = v => Math.abs(num(v)) > 0.005;
+
+  /* 1. Повнота і коректність введення */
+  const eqEmpty = !nz(p.eqOpen) && !nz(p.eqClose);
+  if (eqEmpty && r.debtAvg>0) add("err","Не внесено власний капітал на початок і кінець періоду. Без нього тест «3,5 раза» вважається виконаним автоматично, і результат буде хибним.");
+  if (!nz(p.fro) && !nz(p.fv) && !nz(p.av)) add("err","Не внесено ФРО, ФВ і АВ (розділ 2). Ліміт дорівнює 0, тож усі проценти будуть обмежені.");
+  if (r.grossInt>0 && r.debtAvg<=0) add("err","Проценти внесено, а сальдо боргових зобов'язань перед нерезидентами дорівнює 0. Внесіть сальдо на початок і кінець періоду.");
+  if (!DL.some(d=>nz(d.interest)) && r.debtAvg>0) add("warn","Борг перед нерезидентами є, а проценти не внесено. Перевірте колонку «Проценти у витратах».");
+  const negD = DL.filter(d=>num(d.open)<0||num(d.close)<0||num(d.interest)<0||num(d.tpAdj)<0);
+  if (negD.length) add("err","Від'ємні суми в реєстрі боргів (рядки "+negD.map(d=>DL.indexOf(d)+1).join(", ")+"). Сальдо і проценти вводяться додатними числами.");
+  const negF = [["ФВ",p.fv],["АВ",p.av],["частка амортизації капіталізованих процентів",p.capAmort],["інші різниці, що збільшують",p.incOther],["інші різниці, що зменшують",p.decOther]].filter(x=>num(x[1])<0).map(x=>x[0]);
+  if (negF.length) add("err","Від'ємні значення: "+negF.join(", ")+". Ці показники вводяться додатними; від'ємним може бути лише ФРО (збиток).");
+  if (DL.some(d=>num(d.tpAdj)>num(d.interest)+0.005)) add("err","Коригування за ст. 39 більше за нараховані проценти в рядку реєстру.");
+  const unnamed = DL.filter(d=>!String(d.name).trim() && (nz(d.open)||nz(d.close)||nz(d.interest)));
+  if (unnamed.length) add("warn","Є рядки реєстру з сумами, але без назви кредитора (рядки "+unnamed.map(d=>DL.indexOf(d)+1).join(", ")+").");
+  if (r.grossInt > num(p.fv) + 0.5) add("err","Проценти перед нерезидентами ("+fmt(r.grossInt)+") більші за фінансові витрати Ф2 ("+fmt(num(p.fv))+"). Перевірте суми або капіталізацію процентів.");
+  else if (r.grossInt>0) add("ok","Проценти перед нерезидентами не перевищують фінансових витрат Ф2.");
+  if (r.grossInt>0 && Math.abs(r.grossInt-num(p.fv))<1) add("warn","ФВ дорівнює процентам перед нерезидентами. Переконайтеся, що у ФВ включено <b>всі</b> фінансові витрати Ф2 (р. 2250), зокрема перед резидентами, а не лише ці проценти.");
+  const names = new Set(DL.map(d=>String(d.name).trim()).filter(Boolean));
+  if (names.size===1 && !r.notApplicable) add("info","У реєстрі один кредитор. Переконайтеся, що враховано всі боргові зобов'язання перед нерезидентами: позики, кредити, фінансовий лізинг, нараховані проценти.");
+
+  /* 2. Узгодженість періодів року (наростаючий підсумок від 01.01) */
+  { const idx = PERIODS.findIndex(x=>x.id===S.active);
+    const prev = PERIODS.slice(0,idx).map(x=>x.id).filter(id=>S.periods[id].enabled).pop();
+    if (prev){ const q = S.periods[prev], pl = PERIODS.find(x=>x.id===prev).label;
+      const sumI = x=>x.debts.reduce((a,d)=>a+num(d.interest),0);
+      const dec = [["проценти",sumI(q),r.grossInt],["ФВ",num(q.fv),num(p.fv)],["АВ",num(q.av),num(p.av)]].filter(x=>x[2] < x[1]-0.5).map(x=>x[0]);
+      if (dec.length) add("warn","Показники менші, ніж за попередній період ("+pl+"): "+dec.join(", ")+". Суми вносяться наростаючим підсумком з початку року.");
+      const sumO = x=>x.debts.reduce((a,d)=>a+num(d.open),0);
+      if (Math.abs(sumO(q)-sumO(p))>0.5 || Math.abs(num(q.eqOpen)-num(p.eqOpen))>0.5)
+        add("warn","Сальдо на початок (борг або власний капітал) відрізняється від періоду «"+pl+"». Для всіх періодів року це сальдо на 01.01.");
+    } }
+
+  /* 3. Результат розрахунку */
+  if (r.notApplicable) add("info","Фінансова установа / компанія, що займається виключно лізингом: різниці за п. 140.2 не визначаються. Підтвердіть статус платника документально.");
+  if (!r.notApplicable && r.negative && r.SP>0) add("warn",(r.rg==="pre2021"?"Сума ФРО + ФВ + АВ ≤ 0":r.rg==="y2021early"?"Показник 0,3 × ООПП + ФВ + АВ ≤ 0":"Показник ООПП + ФВ + АВ ≤ 0")+". ФРО збільшується на <b>всю</b> суму процентів, зменшення за 3.2.1 не виникає.");
+  if (!r.notApplicable && !r.testMet && r.pool>0) add("warn", S.method.decreaseWhenTestFails ? "Умова п. 140.2 не виконана, але зменшення 3.2.1 дозволене в межах ліміту "+capTxt+" (позиція (а) у параметрах). Позиція потребує обґрунтування." : "Умова п. 140.2 не виконана. За обраною позицією (б) зменшення 3.2.1 не нараховується.");
+  if (r.decrease>0 && r.capacity > r.pool + 0.005) add("info","Зменшення 3.2.1 обмежено залишком перенесених процентів ("+fmt(r.pool)+").");
+  if (r.exclCat>0) add("info","Проценти перед іноземними банками / МФО ("+fmt(r.exclCat)+") виключено з СП; борг перед ними включено в тест «3,5 раза». Майте підтвердні документи: банківська ліцензія кредитора; для МФО — міжнародний договір і державна або місцева гарантія.");
   if (r.tpAdj>0 && S.active!=="Y") add("warn","Коригування за принципом «витягнутої руки» (абз. 7 п. 140.2) застосовується за наслідками звітного року. У проміжному періоді воно може бути передчасним.");
-  if (p.debts.some(d=>num(d.tpAdj)>num(d.interest)+0.005)) add("err","Коригування за ст. 39 більше за нараховані проценти в рядку реєстру.");
-  if (p.debts.some(d=>d.cat==="related") && r.tpAdj===0 && S.active==="Y") add("warn","Є пов'язані кредитори. Підтвердіть, що процентна ставка відповідає принципу «витягнутої руки» (звіт про КО, документація з ТЦУ), або внесіть коригування за ст. 39.");
-  if (r.exclCat>0) add("ok","Проценти перед іноземними банками / МФО ("+fmt(r.exclCat)+") виключено з СП. Борг перед ними включено в тест 3,5×. Перевірте підтвердні документи: банківська ліцензія кредитора; для МФО — міжнародний договір і державна або місцева гарантія.");
-  if (Math.abs(r.grossInt-num(p.fv))<1 && num(p.fv)>0) add("warn","ФВ ≈ СП. Переконайтеся, що у ФВ включено <b>всі</b> фінансові витрати (зокрема перед резидентами, за орендою МСФЗ 16, нарахування дисконту), а не лише проценти нерезиденту.");
-  if (r.capacity > r.pool + 0.005 && r.pool>0 && !r.excess) add("ok","Зменшення обмежено доступним залишком пулу ("+fmt(r.pool)+").");
-  if (r.pool < -0.005) add("err","Від'ємний залишок пулу: у минулих роках використано більше, ніж було накопичено. Перевірте історію перенесення.");
-  if (!r.testMet && r.pool>0) add("warn", S.method.decreaseWhenTestFails ? "Умова п. 140.2 не виконана, але зменшення 3.2.1 дозволене в межах ліміту 30% (позиція (а)). Задокументуйте позицію." : "Умова п. 140.2 не виконана. За обраною позицією (б) зменшення 3.2.1 не нараховується.");
-  if (p.debts.some(d=>!String(d.name).trim())) add("warn","Є рядки боргу без кредитора: для тесту потрібні <b>всі</b> нерезиденти (п. 140.1).");
-  if (p.debts.length<=2 && new Set(p.debts.map(d=>d.name)).size<=1) add("warn","У тест включено одного кредитора. Підтвердіть повноту переліку боргових зобов'язань перед нерезидентами (ОСВ 50/55/60/68, позики, фінансова допомога).");
-  const prevCtl = runPool(priorHistory(), S.poolInitial, S.method.haircut).filter(x=>x.diff!=null && Math.abs(x.diff)>0.5);
-  prevCtl.forEach(x=>{ const n = String(x.note||"").trim();
-    if (n) add("warn",`Залишок пулу на кінець ${x.year} року відрізняється від залишку за декларацією на ${fmt(x.diff)} грн — пояснено: ${esc(n)}`);
-    else add("err",`Залишок пулу на кінець ${x.year} року не збігається із залишком за декларацією: розбіжність ${fmt(x.diff)} грн. Додайте пояснення на вкладці «Перенесення» або виправте дані.`); });
-  { const ys = priorHistory().map(h=>h.year).sort((a,b)=>a-b), gaps = [];
+  if (DL.some(d=>d.cat==="related") && r.tpAdj===0 && S.active==="Y") add("warn","Є пов'язані кредитори. Підтвердіть, що процентна ставка відповідає принципу «витягнутої руки» (звіт про КО, документація з ТЦУ), або внесіть коригування за ст. 39.");
+
+  /* 4. Історія перенесення */
+  { const H = S.history, years = H.map(h=>num(h.year));
+    const dup = [...new Set(years.filter((y,i)=>years.indexOf(y)!==i))];
+    if (dup.length) add("err","В історії перенесення повторюються роки: "+dup.join(", ")+". Залиште по одному рядку на рік.");
+    const late = H.filter(h=>num(h.year)>=Y).map(h=>h.year);
+    if (late.length) add("warn","В історії є рядки звітного або пізніших років ("+late.join(", ")+"). Вони не враховуються: звітний рік береться з розрахунку.");
+    const both = priorHistory().filter(h=>num(h.excess)>0.005 && num(h.used)>0.005).map(h=>h.year);
+    if (both.length) add("warn","У роках "+both.join(", ")+" одночасно є 3.1.1 і 3.2.1. У річній декларації таке неможливо: перевищення виникає лише за відсутності невикористаного ліміту. Перевірте суми.");
+    const negY = runPool(priorHistory(), S.poolInitial, S.method.haircut).filter(x=>x.closing < -0.005).map(x=>x.year);
+    if (negY.length) add("err","Від'ємний залишок перенесених процентів на кінець "+negY.join(", ")+" року: використано більше, ніж було накопичено. Перевірте суми 3.2.1.");
+    const ctl = runPool(priorHistory(), S.poolInitial, S.method.haircut).filter(x=>x.diff!=null && Math.abs(x.diff)>0.5);
+    ctl.forEach(x=>{ const n = String(x.note||"").trim();
+      if (n) add("info",`Залишок на кінець ${x.year} року відрізняється від залишку за декларацією на ${fmt(x.diff)} грн — пояснено: ${esc(n)}`);
+      else add("err",`Залишок на кінець ${x.year} року не збігається із залишком за декларацією: розбіжність ${fmt(x.diff)} грн. Виправте дані або додайте пояснення на вкладці «Перенесення».`); });
+    const ys = priorHistory().map(h=>num(h.year)).sort((a,b)=>a-b), gaps = [];
     for (let i=1;i<ys.length;i++) for (let y=ys[i-1]+1;y<ys[i];y++) gaps.push(y);
-    if (ys.length && ys[ys.length-1] < num(S.meta.year)-1) for (let y=ys[ys.length-1]+1;y<num(S.meta.year);y++) gaps.push(y);
-    if (gaps.length) add("warn",`В історії перенесення пропущено роки: ${gaps.join(", ")}. Для них прийнято 3.1.1 = 0 і 3.2.1 = 0, а зменшення на 5 % застосовано за кожен рік. Додайте ці роки, якщо в них були суми.`); }
-  { const h0 = [...S.history].sort((a,b)=>a.year-b.year)[0];
-    if (h0 && num(S.poolInitial) && Math.abs(num(S.poolInitial)-num(h0.excess))<0.5) add("warn",`Залишок на 01.01.${h0.year} дорівнює перевищенню 3.1.1 цього ж року (${fmt(num(h0.excess))}). Перевірте, чи сума не врахована двічі: як залишок і як 3.1.1.`); }
-  if (!priorHistory().length && !num(S.poolInitial)) add("warn","Історію перенесення не заповнено: залишок на початок року дорівнює 0.");
-  if (S.active!=="Y") add("warn","Проміжний період. Остаточні суми 3.1.1/3.2.1 визначаються в річній декларації.");
-  if (!String(p.note).trim()) add("warn","Не зазначено джерела вхідних даних для бухгалтерської довідки: додайте посилання на ОСВ, Ф1, Ф2, РІ.");
-  $("#checks").innerHTML = ch.join("");
+    if (ys.length) for (let y=ys[ys.length-1]+1;y<Y;y++) gaps.push(y);
+    if (gaps.length) add("warn",`В історії перенесення пропущено роки: ${gaps.join(", ")}. Для них прийнято 3.1.1 = 0 і 3.2.1 = 0, зменшення на 5 % застосовано за кожен рік. Додайте ці роки, якщо в них були суми.`);
+    const h0 = [...H].sort((a,b)=>a.year-b.year)[0];
+    if (h0 && num(S.poolInitial) && Math.abs(num(S.poolInitial)-num(h0.excess))<0.5) add("warn",`Залишок на 01.01.${h0.year} дорівнює перевищенню 3.1.1 цього ж року (${fmt(num(h0.excess))}). Перевірте, чи сума не врахована двічі.`);
+    if (!ys.length && !num(S.poolInitial)) add("info","Історію перенесення не заповнено: залишок перенесених процентів на початок року дорівнює 0. Якщо в минулих роках були суми 3.1.1, внесіть їх на вкладці «Перенесення».");
+  }
+
+  /* 5. Налаштування і довідка */
+  if (r.rg==="pre2021") add("info","Застосовано редакцію до 01.01.2021: тест і СП лише щодо <b>пов'язаних</b> осіб-нерезидентів; ліміт 50 % від ФРО + ФВ + АВ; АВ — за даними <b>фінансової</b> звітності; для фінустанов і лізингових компаній поріг 10 раз.");
+  if (Y===2021) add("warn", r.rg==="y2021early" ? "2021 рік, ранній підхід ДПС (0,3 × ООПП + ФВ + АВ). З 09.2021 ДПС вимагає 0,3 × (ООПП + ФВ + АВ); оцініть податковий ризик." : "2021 рік: розраховано за позицією ДПС з 09.2021. Якщо декларацію подано за раннім підходом (0,3 × ООПП + ФВ + АВ), перерахуйте з відповідною редакцією.");
+  if (Math.abs(S.method.cap-0.3)>1e-9 || Math.abs(S.method.haircut-0.05)>1e-9) add("warn","Змінено стандартні параметри: ліміт "+pct(S.method.cap)+", щорічне зменшення "+pct(S.method.haircut)+" (за ПКУ — 30 % і 5 %).");
+  if (S.active!=="Y") add("info","Проміжний період: остаточні суми 3.1.1 / 3.2.1 визначаються в річній декларації.");
+  if (!String(p.note).trim()) add("warn","Не зазначено джерела вхідних даних для бухгалтерської довідки (розділ 2, поле «Джерела даних»).");
+  if (!String(S.meta.payer).trim() || !String(S.meta.edrpou).trim()) add("info","Для довідки заповніть назву платника і код ЄДРПОУ на вкладці «Параметри та метод».");
+
+  const order = {err:0,warn:1,info:2,ok:3};
+  ch.sort((x,y)=>order[x.lvl]-order[y.lvl]);
+  const cnt = l => ch.filter(x=>x.lvl===l).length;
+  const sum = document.getElementById("checksSum");
+  if (sum) sum.innerHTML = `<span class="badge ${cnt("err")?"b-err":"b-ok"}">Помилок: ${cnt("err")}</span> <span class="badge ${cnt("warn")?"b-warn":"b-ok"}">Попереджень: ${cnt("warn")}</span> <span class="badge b-info">Інформація: ${cnt("info")}</span>`;
+  $("#checks").innerHTML = ch.map(x=>x.html).join("");
 }
 
 /* ==================== Render: pool ==================== */

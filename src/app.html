@@ -176,6 +176,7 @@ ul.checks li .tag{font:700 11px/1.8 var(--font-sans);letter-spacing:.08em;text-t
 ul.checks li.ok{background:var(--ok-bg);border-color:var(--ok-bd)} ul.checks li.ok .tag{color:var(--ok-tx)}
 ul.checks li.warn{background:var(--warn-bg);border-color:var(--warn-bd)} ul.checks li.warn .tag{color:var(--warn-tx)}
 ul.checks li.err{background:var(--err-bg);border-color:var(--err-bd)} ul.checks li.err .tag{color:var(--err-tx)}
+ul.checks li.info{background:var(--info-bg);border-color:var(--info-bd)} ul.checks li.info .tag{color:var(--info-tx)}
 @media (max-width:520px){ ul.checks li{grid-template-columns:1fr;gap:2px} }
 .note-info{background:var(--info-bg);color:var(--text);border-left:4px solid var(--info-bd);padding:10px 12px;border-radius:var(--radius-sm);font-size:13px}
 .hidden{display:none!important}
@@ -224,7 +225,7 @@ footer.app{border-top:1px solid var(--border);color:var(--muted);font-size:11px;
 #printArea ul{margin:2pt 0;padding-left:0;list-style:none}
 #printArea ul li{display:grid;grid-template-columns:30mm 1fr;gap:3mm;margin:3pt 0;font-size:9pt;break-inside:avoid}
 #printArea ul li .tag{font:700 7.5pt/1.6 var(--font-sans);letter-spacing:.06em;text-transform:uppercase}
-#printArea ul li[data-lvl="ok"] .tag{color:#006B3C} #printArea ul li[data-lvl="warn"] .tag{color:#B45309} #printArea ul li[data-lvl="err"] .tag{color:#B91C1C}
+#printArea ul li[data-lvl="ok"] .tag{color:#006B3C} #printArea ul li[data-lvl="warn"] .tag{color:#B45309} #printArea ul li[data-lvl="err"] .tag{color:#B91C1C} #printArea ul li[data-lvl="info"] .tag{color:#1D4ED8}
 #printArea .sig{display:grid;grid-template-columns:1fr 1fr;gap:12mm;margin-top:14mm;break-inside:avoid}
 #printArea .sig > div{font-size:9.5pt}
 #printArea .small{font-size:8pt;color:#475569}
@@ -311,6 +312,7 @@ footer.app{border-top:1px solid var(--border);color:var(--muted);font-size:11px;
 
       <section class="card">
         <h2>4. Контрольні процедури</h2>
+        <p id="checksSum" style="margin:-2px 0 10px"></p>
         <ul class="checks" id="checks"></ul>
       </section>
     </div>

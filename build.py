@@ -57,6 +57,12 @@ def main():
 
     html = (root / "src/app.html").read_text(encoding="utf-8")
     js = (root / "src/app.js").read_text(encoding="utf-8")
+    # синтаксична перевірка до збирання (потрібен node; якщо його немає — пропускаємо)
+    import shutil, subprocess
+    if shutil.which("node"):
+        chk = subprocess.run(["node", "--check", str(root / "src/app.js")], capture_output=True, text=True)
+        if chk.returncode != 0:
+            raise SystemExit("Помилка синтаксису в src/app.js:\n" + chk.stderr)
     case = json.loads(pathlib.Path(a.case).read_text(encoding="utf-8"))
     case_js = json.dumps(case, ensure_ascii=False).replace("</", "<\\/")  # безпечно всередині <script>
     js = js.replace("/*@@CASE@@*/null", case_js)
