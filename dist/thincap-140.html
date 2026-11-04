@@ -1095,7 +1095,6 @@ function periodSection(pid, n){
   const saved = S.active; S.active = pid; renderOutputs();
   const M = model(), r = M.results[pid], p = S.periods[pid], lbl = PERIODS.find(x=>x.id===pid).label+" "+S.meta.year;
   const trace = $("#traceTbl tbody").innerHTML;
-  const checks = [...document.querySelectorAll("#checks li")].map(li=>`<li data-lvl="${li.dataset.lvl}">${li.innerHTML}</li>`).join("");
   S.active = saved; renderOutputs();
   const debts = p.debts.map((d,i)=>`<tr><td class="c">${i+1}</td><td>${esc(d.name)||"—"}</td><td>${esc(d.account)||"—"}</td><td>${esc(CATS[d.cat]?.label||"—")}</td><td class="n">${fmt(num(d.open))}</td><td class="n">${fmt(num(d.close))}</td><td class="n">${fmt((num(d.open)+num(d.close))/2)}</td><td class="n">${fmt(num(d.interest))}</td><td class="n">${fmt(num(d.tpAdj))}</td></tr>`).join("");
   const test = r.notApplicable ? "П. 140.2 не застосовується: фінансова установа або компанія, що займається виключно лізинговою діяльністю."
@@ -1111,7 +1110,6 @@ function periodSection(pid, n){
      <tr><td>Рядок 3.1.1: збільшення фінансового результату (п. 140.2)</td><td class="n">${fmt(r.excess)}</td></tr>
      <tr><td>Рядок 3.2.1: зменшення фінансового результату (п. 140.3)</td><td class="n">${fmt(r.decrease)}</td></tr>
      <tr><td>Залишок процентів на перенесення на кінець періоду</td><td class="n">${fmt(r.closing)}</td></tr></tbody></table>
-   <h3>${n}.3. Контрольні перевірки розрахунку</h3><ul>${checks}</ul>
    <div><b>Джерела даних / примітка:</b> ${String(p.note).trim()?esc(p.note):"—"}</div>`;
 }
 function printWorkingPaper(mode){
