@@ -97,6 +97,7 @@ nav.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px
 .btn.ghost:hover{background:var(--tint)}
 .btn.icon{min-width:44px;padding:8px}
 .recalc-msg{font-size:13px;color:var(--ok-tx)}
+.save-state{font-size:13px;color:var(--text-2);margin:-4px 0 6px}
 .recalc-msg:empty{display:none}
 @keyframes flash{from{box-shadow:0 0 0 3px var(--accent)}to{box-shadow:0 0 0 0 transparent}}
 .flash{animation:flash 1.2s ease-out}
@@ -260,10 +261,12 @@ footer.app{border-top:1px solid var(--border);color:var(--muted);font-size:11px;
     <button class="btn" id="btnXlsx">Експорт у Excel</button>
     <button class="btn gold" id="btnSave">Зберегти JSON</button>
     <label class="btn gold" for="fileLoad" tabindex="0">Завантажити JSON</label><input type="file" id="fileLoad" accept=".json,application/json" class="hidden">
+    <button class="btn ghost hidden" id="btnCheckFile" title="Перевірити, чи існує збережений файл JSON і чи містить він поточні дані">Перевірити файл</button>
     <button class="btn ghost" id="btnPrint">Друк екрана</button>
     <button class="btn ghost" id="btnExample">Завантажити приклад</button>
     <button class="btn ghost" id="btnNew">Новий розрахунок</button>
   </div>
+  <p class="save-state noprint" id="saveState" role="status" aria-live="polite"></p>
   <main>
     <!-- ============ CALC ============ -->
     <div class="tab" id="tab-calc">
@@ -407,7 +410,13 @@ footer.app{border-top:1px solid var(--border);color:var(--muted);font-size:11px;
         </ul>
 
         <h3>Крок 3. Розрахунок звітного періоду</h3>
-        <p>Вкладка <b>«Розрахунок періоду»</b>. Оберіть період (I квартал, півріччя, 9 місяців, рік) і позначте <b>«період заповнено»</b>. Усі суми вносяться наростаючим підсумком з початку року.</p>
+        <p>Вкладка <b>«Розрахунок періоду»</b>. Оберіть рік і період (I квартал, півріччя, 9 місяців, рік) і внесіть дані. Усі суми вносяться наростаючим підсумком з 01.01.</p>
+        <ul>
+          <li>Період вважається <b>заповненим</b> автоматично, щойно в ньому з'являється хоча б одна сума: сальдо на кінець, проценти, ФВ, АВ, ФРО, інші різниці. На кнопці періоду видно стан: «заповнено» або «порожній».</li>
+          <li>Сальдо на 01.01, яке програма переносить із попереднього року, період заповненим не робить.</li>
+          <li>Порожні періоди не рахуються й не друкуються. Тому, наприклад, ще не заповнений «Рік» не обнулить результат.</li>
+          <li>У перенесення на наступні роки йде результат <b>останнього заповненого</b> періоду року. Для річної декларації обов'язково заповніть період «Рік»: доки його немає, програма бере 9 місяців і попереджає про це.</li>
+        </ul>
         <ul>
           <li><b>Реєстр боргових зобов'язань (розділ 1).</b> Внесіть по рядку на кожного кредитора-нерезидента і кожен рахунок бухобліку: кредити, позики, нараховані проценти (684), фінансовий лізинг тощо. Для кожного рядка вкажіть:
             <ul>
@@ -434,6 +443,8 @@ footer.app{border-top:1px solid var(--border);color:var(--muted);font-size:11px;
           <li><b>«Зберегти JSON»</b> зберігає всі дані у файл. Зберігайте його разом із документами звітного періоду. <b>«Завантажити JSON»</b> відновлює дані з такого файлу, зокрема на іншому комп'ютері.</li>
           <li><b>«Експорт у Excel»</b> вивантажує розрахунок у таблицю. Для цього потрібен інтернет.</li>
           <li>Дані автоматично зберігаються в браузері, але лише на цьому комп'ютері. Якщо очистити історію браузера, вони зникнуть. Тому завжди зберігайте JSON.</li>
+          <li>Під кнопками видно стан збереження: «Не збережено у файл», «Є незбережені зміни» або «Збережено». Якщо зміни не збережено, браузер перепитає перед закриттям вкладки.</li>
+          <li><b>«Перевірити файл»</b> (Chrome, Edge) перевіряє, чи збережений раніше JSON є на диску і чи містить поточні дані. Браузер може попросити дозвіл на читання файлу.</li>
         </ul>
 
         <h3>Крок 6. Наступні роки (2027 і далі)</h3>

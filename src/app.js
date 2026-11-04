@@ -13,12 +13,20 @@ const CATS = {
   mfo:{label:"МФО з держгарантією (виняток «б»)", excl:true}
 };
 const emptyDebt = () => ({name:"",account:"",cat:"other",open:0,close:0,interest:0,tpAdj:0});
-const emptyPeriod = () => ({enabled:false, debts:[emptyDebt()],
+const emptyPeriod = () => ({debts:[emptyDebt()],
   eqOpen:0, eqClose:0, capAmort:0, fv:0, av:0, fro:0, incOther:0, decOther:0, note:""});
 
 const defaultMethod = () => ({includeDecInObject:false, decreaseWhenTestFails:true, cap:0.30, haircut:0.05});
 
-const blankYear = () => { const periods = {}; PERIODS.forEach(p => periods[p.id] = emptyPeriod()); periods.Q1.enabled = true; return {periods, active:"Q1"}; };
+/* Період заповнений, якщо в ньому внесено хоча б одну суму на кінець періоду / за період.
+   Сальдо на початок (01.01) не враховується: його програма переносить автоматично. */
+function filled(p){
+  if (!p) return false;
+  const nz = v => Math.abs(num(v)) > 0.005;
+  return [p.eqClose, p.fv, p.av, p.fro, p.incOther, p.decOther, p.capAmort].some(nz)
+      || (p.debts||[]).some(d => nz(d.close) || nz(d.interest) || nz(d.tpAdj));
+}
+const blankYear = () => { const periods = {}; PERIODS.forEach(p => periods[p.id] = emptyPeriod()); return {periods, active:"Q1"}; };
 
 /* S.periods і S.active — проекція обраного року (S.meta.year) на S.years; у JSON не серіалізуються */
 function attach(st){
@@ -191,11 +199,48 @@ else if (CASE && CASE.rev && (S.caseRev||0) < CASE.rev &&
          confirm("Файл містить оновлені дані кейсу «"+(CASE.title||"")+"». Завантажити їх замість даних, збережених у браузері?\n\nСкасувати — залишити збережені дані."))
   S = exampleState();
 S = migrate(S);
-function persist(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(S)); }catch(e){} }
+function store(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(S)); }catch(e){} }
+/* persist() — кожна зміна даних; час останньої зміни порівнюється з часом збереження у файл JSON */
+function persist(){ S.changedAt = Date.now(); store(); renderSaveState(); }
+const unsaved = () => !S.saveInfo || (S.changedAt||0) > (S.saveInfo.at||0);
+const fmtDT = t => new Date(t).toLocaleString("uk-UA",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+function renderSaveState(){
+  const el = document.getElementById("saveState"); if (!el) return;
+  const i = S.saveInfo;
+  el.innerHTML = !i ? `<span class="badge b-warn">Не збережено у файл</span> Натисніть «Зберегти JSON».`
+    : unsaved() ? `<span class="badge b-warn">Є незбережені зміни</span> Останнє збереження: ${esc(i.name||"файл JSON")}, ${fmtDT(i.at)}.`
+    : `<span class="badge b-ok">Збережено</span> ${i.loaded?"Завантажено з":"У файл"} ${esc(i.name||"JSON")}, ${fmtDT(i.at)}.`;
+  const cb = document.getElementById("btnCheckFile"); if (cb) cb.classList.toggle("hidden", !window.showSaveFilePicker);
+}
+/* дані для порівняння з файлом (без службових полів) */
+const dataKey = o => JSON.stringify({meta:o.meta, method:o.method, poolInitial:o.poolInitial, history:o.history,
+  years:Object.fromEntries(Object.entries(o.years||{}).map(([y,v])=>[y, v.periods]))});
+/* IndexedDB: дескриптор останнього збереженого JSON (лише Chrome/Edge) */
+const idb = (mode, fn) => new Promise((res,rej)=>{ try{ const r = indexedDB.open("thincap140",1);
+  r.onupgradeneeded = ()=> r.result.createObjectStore("kv");
+  r.onsuccess = ()=>{ const tx = r.result.transaction("kv",mode), st = tx.objectStore("kv"), q = fn(st);
+    tx.oncomplete = ()=>res(q && q.result); tx.onerror = ()=>rej(tx.error); };
+  r.onerror = ()=>rej(r.error); }catch(e){ rej(e); } });
+let putHandle = h => idb("readwrite", st=>st.put(h,"jsonHandle")).catch(()=>{});
+let getHandle = () => idb("readonly", st=>st.get("jsonHandle")).catch(()=>null);
+async function checkFile(){
+  const show = (lvl,t) => { document.getElementById("saveState").innerHTML = `<span class="badge b-${lvl}">${lvl==="ok"?"Файл на місці":lvl==="warn"?"Увага":"Файл не знайдено"}</span> ${t}`; };
+  const h = await getHandle();
+  if (!h){ show("warn","З цього браузера ще не зберігали JSON через вікно «Зберегти як». Натисніть «Зберегти JSON»."); return; }
+  try{
+    let perm = await h.queryPermission({mode:"read"});
+    if (perm !== "granted") perm = await h.requestPermission({mode:"read"});
+    if (perm !== "granted"){ show("warn","Немає дозволу на читання файлу «"+esc(h.name)+"»."); return; }
+    const f = await h.getFile(), o = JSON.parse(await f.text());
+    const same = dataKey(migrate(o)) === dataKey(S);
+    show(same?"ok":"warn", same ? `«${esc(f.name)}» існує і містить поточні дані (змінено ${fmtDT(f.lastModified)}).`
+                               : `«${esc(f.name)}» існує, але дані у файлі відрізняються від поточних. Збережіть JSON ще раз.`);
+  }catch(err){ show("err", `Файл «${esc(h.name)}» не знайдено або його не вдалося прочитати (${esc(err.name||err.message)}). Збережіть JSON ще раз.`); }
+}
 
 /* ==================== Похідна модель ==================== */
 function latestPeriodIdOf(y){ const Y = S.years[String(y)]; if (!Y) return null;
-  const en = PERIODS.filter(p=>Y.periods[p.id] && Y.periods[p.id].enabled); return en.length ? en[en.length-1].id : null; }
+  const en = PERIODS.filter(p=>filled(Y.periods[p.id])); return en.length ? en[en.length-1].id : null; }
 function latestPeriodId(){ return latestPeriodIdOf(num(S.meta.year)); }
 
 /* Рядки пулу до року Y (не включно). Джерело року: «manual» — внесено з декларації (має пріоритет),
@@ -230,7 +275,7 @@ function openingPoolForYear(rows){
 function model(){
   const Y = num(S.meta.year), rows = poolRows(Y), opening = openingPoolForYear(rows);
   const results = {};
-  PERIODS.forEach(p => { if (S.periods[p.id].enabled) results[p.id] = calcPeriod(S.periods[p.id], S.meta, S.method, opening); });
+  PERIODS.forEach(p => { if (filled(S.periods[p.id])) results[p.id] = calcPeriod(S.periods[p.id], S.meta, S.method, opening); });
   const lp = latestPeriodId();
   const pool = rows.slice();
   if (lp){ const r = results[lp]; pool.push({year:Y, opening, excess:r.excess, used:r.decrease, closing:r.closing, control:null, diff:null, source:"current", pid:lp, auto:lp}); }
@@ -244,11 +289,10 @@ function renderPeriodBar(){
     <select id="yearSel" style="width:auto;min-width:110px">${ys.map(y=>`<option value="${y}"${y===Y?" selected":""}>${y}${latestPeriodIdOf(y)?"":" (порожній)"}</option>`).join("")}
     <option value="new:${next}">+ Новий рік ${next}</option><option value="new:other">+ Інший рік…</option></select></label>`;
   $("#periodBar").innerHTML = sel + PERIODS.map(p => {
-    const en = S.periods[p.id].enabled;
-    return `<button class="btn ${S.active===p.id?'primary':''}" data-period="${p.id}" aria-pressed="${S.active===p.id}">${p.label} ${num(S.meta.year)}${en?'':' · не заповнено'}</button>`;
-  }).join("") + `<label class="chk noprint" style="margin-left:8px;align-items:center"><input type="checkbox" id="perEnabled"> період заповнено</label>`;
-  $("#perEnabled").checked = S.periods[S.active].enabled;
-  $("#periodHint").textContent = "Податкові періоди наростаючим підсумком з 01.01. Результат року (річний або останній заповнений період) автоматично переходить у перенесення на наступні роки. Новий рік створюється з кредиторами і сальдо на 01.01 із попереднього року.";
+    const en = filled(S.periods[p.id]);
+    return `<button class="btn ${S.active===p.id?'primary':''}" data-period="${p.id}" aria-pressed="${S.active===p.id}">${p.label} ${num(S.meta.year)}${en?' · заповнено':' · порожній'}</button>`;
+  }).join("");
+  $("#periodHint").innerHTML = "Оберіть період і внесіть дані наростаючим підсумком з 01.01. Період стає <b>заповненим</b> автоматично, щойно в ньому з'являється хоча б одна сума (сальдо на кінець, проценти, ФВ, АВ, ФРО тощо); порожні періоди в розрахунок і друк не потрапляють. У перенесення на наступні роки йде результат <b>останнього заповненого</b> періоду року: для річної декларації заповніть період «Рік».";
 }
 
 function renderInputs(){
@@ -280,7 +324,7 @@ function renderOutputs(){
   // debt averages
   p.debts.forEach((d,i)=>{ const c = document.querySelector(`[data-avg="${i}"]`); if (c) c.textContent = fmt((num(d.open)+num(d.close))/2); });
   if (!r){
-    $("#debtSum").innerHTML = ""; $("#spOut").textContent = "—"; $("#testOut").innerHTML = `<span class="badge b-info">Інформація</span> Період не заповнено: позначте «період заповнено».`;
+    $("#debtSum").innerHTML = ""; $("#spOut").textContent = "—"; $("#testOut").innerHTML = `<span class="badge b-info">Порожній період</span> Внесіть дані періоду: розрахунок, результат і контрольні процедури з\'являться автоматично після першої суми.`;
     $("#kpis").innerHTML = ""; $("#traceTbl tbody").innerHTML = ""; $("#checks").innerHTML = ""; { const z=document.getElementById("checksSum"); if (z) z.innerHTML=""; } return;
   }
   const kp = (l,v,key) => `<div class="kpi${key?' key':''}"><div class="lbl">${l}</div><div class="res">${v}</div></div>`;
@@ -348,7 +392,7 @@ function renderOutputs(){
 
   /* 2. Узгодженість періодів року (наростаючий підсумок від 01.01) */
   { const idx = PERIODS.findIndex(x=>x.id===S.active);
-    const prev = PERIODS.slice(0,idx).map(x=>x.id).filter(id=>S.periods[id].enabled).pop();
+    const prev = PERIODS.slice(0,idx).map(x=>x.id).filter(id=>filled(S.periods[id])).pop();
     if (prev){ const q = S.periods[prev], pl = PERIODS.find(x=>x.id===prev).label;
       const sumI = x=>x.debts.reduce((a,d)=>a+num(d.interest),0);
       const dec = [["проценти",sumI(q),r.grossInt],["ФВ",num(q.fv),num(p.fv)],["АВ",num(q.av),num(p.av)]].filter(x=>x[2] < x[1]-0.5).map(x=>x[0]);
@@ -407,6 +451,7 @@ function renderOutputs(){
   if (Y===2021) add("warn", r.rg==="y2021early" ? "2021 рік, ранній підхід ДПС (0,3 × ООПП + ФВ + АВ). З 09.2021 ДПС вимагає 0,3 × (ООПП + ФВ + АВ); оцініть податковий ризик." : "2021 рік: розраховано за позицією ДПС з 09.2021. Якщо декларацію подано за раннім підходом (0,3 × ООПП + ФВ + АВ), перерахуйте з відповідною редакцією.");
   if (Math.abs(S.method.cap-0.3)>1e-9 || Math.abs(S.method.haircut-0.05)>1e-9) add("warn","Змінено стандартні параметри: ліміт "+pct(S.method.cap)+", щорічне зменшення "+pct(S.method.haircut)+" (за ПКУ — 30 % і 5 %).");
   if (S.active!=="Y") add("info","Проміжний період: остаточні суми 3.1.1 / 3.2.1 визначаються в річній декларації.");
+  if (unsaved()) add("warn", S.saveInfo ? "Є зміни, не збережені у файл JSON (останнє збереження: "+esc(S.saveInfo.name||"")+", "+fmtDT(S.saveInfo.at)+"). Натисніть «Зберегти JSON»." : "Дані не збережено у файл JSON: вони є лише в цьому браузері. Натисніть «Зберегти JSON» і збережіть файл разом із документами періоду.");
   if (!String(p.note).trim()) add("warn","Не зазначено джерела вхідних даних для бухгалтерської довідки (розділ 2, поле «Джерела даних»).");
   if (!String(S.meta.payer).trim() || !String(S.meta.edrpou).trim()) add("info","Для довідки заповніть назву платника і код ЄДРПОУ на вкладці «Параметри та метод».");
 
@@ -482,7 +527,7 @@ document.addEventListener("input", e => {
   else if (t.dataset.h!=null){ const h=S.history[+t.dataset.h]; const f=t.dataset.f;
     h[f] = f==="note" ? t.value : (f==="control" && t.value.trim()==="") ? null : num(t.value); }
   else return;
-  persist(); renderOutputs();
+  persist(); renderOutputs(); renderPeriodBar();
   document.querySelectorAll(".recalc-msg").forEach(m => m.textContent = "");
 });
 document.addEventListener("change", e => {
@@ -495,7 +540,6 @@ document.addEventListener("change", e => {
     persist(); renderAll(); return;
   }
   if (t.dataset.mm && t.type==="checkbox"){ S.method[t.dataset.mm] = t.checked; }
-  else if (t.id==="perEnabled"){ S.periods[S.active].enabled = t.checked; }
   else if (t.dataset.m==="kind" || t.dataset.m==="regime"){ S.meta[t.dataset.m] = t.value; }
   else if (t.dataset.h!=null || t.id==="poolInitial" || t.dataset.m==="year"){ /* re-render pool table after edit */ }
   else if (t.classList?.contains("num")) { t.value = fmtIn(num(t.value)); persist(); return; }
@@ -521,6 +565,7 @@ document.addEventListener("click", e => {
     S.history.push({year:y,excess:0,used:0,control:null}); persist(); renderAll(); return; }
   if (t.dataset.delh!=null){ S.history.splice(+t.dataset.delh,1); persist(); renderAll(); return; }
   if (t.id==="btnSave") return saveJson();
+  if (t.id==="btnCheckFile") return checkFile();
   if (t.id==="btnXlsx") return exportXlsx();
   if (t.id==="btnPrint"){ document.body.classList.remove("wp"); return window.print(); }
   if (t.dataset.wp) return printWorkingPaper(t.dataset.wp);
@@ -536,7 +581,7 @@ $("#fileLoad").addEventListener("change", async e => {
     // приймаємо нову структуру (years) і стару (periods одного року)
     if (!o || typeof o!=="object" || !o.meta || !(o.years || o.periods))
       throw new Error("це не файл даних ThinCap 140 (немає розділів meta / years)");
-    S = migrate(o); persist(); renderAll();
+    S = migrate(o); S.saveInfo = {at:Date.now(), name:f.name, loaded:true}; S.changedAt = S.saveInfo.at; store(); renderAll(); renderSaveState();
     const ys = Object.keys(S.years).sort().join(", ");
     document.querySelectorAll(".recalc-msg").forEach(m => m.textContent = `Завантажено «${f.name}»: роки ${ys}.`);
   }
@@ -552,20 +597,25 @@ const isUp = c => !!c && c!==c.toLowerCase();
 const latin = n => { const ch = n.split("");
   return ch.map((c,i)=>{ const l=c.toLowerCase(), t=TR[l]; if (t==null) return c; if (c===l) return t;
     return (isUp(ch[i-1]) || isUp(ch[i+1])) ? t.toUpperCase() : t.charAt(0).toUpperCase()+t.slice(1); }).join("").replace(/[^A-Za-z0-9._-]+/g,"_"); };
-async function saveFile(name, blob, desc, ext, mime){
+async function saveFile(name, blob, desc, ext, mime, onHandle){
   if (window.showSaveFilePicker){
     try{ const h = await window.showSaveFilePicker({suggestedName:name, types:[{description:desc, accept:{[mime]:[ext]}}]});
-      const w = await h.createWritable(); await w.write(blob); await w.close(); return true; }
+      const w = await h.createWritable(); await w.write(blob); await w.close(); if (onHandle) await onHandle(h); return h.name; }
     catch(err){ if (err && err.name==="AbortError") return false; /* інша помилка — запасний спосіб */ }
   }
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([blob], {type:"application/octet-stream"}));
   a.download = latin(name); a.style.display = "none"; document.body.appendChild(a); a.click();
   setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1500);
-  return true;
+  return a.download;
 }
-function saveJson(){
-  return saveFile(fileBase()+".json", new Blob([JSON.stringify(S,null,2)],{type:"application/json"}), "Дані ThinCap 140 (JSON)", ".json", "application/json");
+async function saveJson(){
+  const at = Date.now();
+  const prev = S.saveInfo; S.saveInfo = {at, name:fileBase()+".json"};       // позначка потрапляє і у файл
+  const name = await saveFile(fileBase()+".json", new Blob([JSON.stringify(S,null,2)],{type:"application/json"}),
+                              "Дані ThinCap 140 (JSON)", ".json", "application/json", putHandle);
+  if (!name){ S.saveInfo = prev; renderSaveState(); return false; }   // скасовано
+  S.saveInfo = {at, name}; S.changedAt = at; store(); renderSaveState(); renderOutputs(); return true;
 }
 function exportXlsx(){
   if (typeof XLSX === "undefined"){ alert("Бібліотека Excel не завантажилась (немає мережі). Скористайтеся «Зберегти JSON» або «Друк / PDF»."); return; }
@@ -618,7 +668,7 @@ function periodSection(pid, n){
 }
 function printWorkingPaper(mode){
   const M = model();
-  const pids = mode==="all" ? PERIODS.filter(x=>S.periods[x.id].enabled).map(x=>x.id) : [S.active];
+  const pids = mode==="all" ? PERIODS.filter(x=>filled(S.periods[x.id])).map(x=>x.id) : [S.active];
   if (!pids.length || !M.results[pids[0]]){ alert("Період не заповнено: немає що друкувати."); return; }
   const fn = [], fnNo = {};
   M.pool.forEach(x=>{ const a = Math.abs(num(x.adj))>0.005;
@@ -666,7 +716,7 @@ function recalc(){
   const r = model().results[S.active];
   const tm = new Date().toLocaleTimeString("uk-UA",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
   const text = r ? `Перераховано о ${tm}: кредиторів ${S.periods[S.active].debts.length}; 3.1.1 = ${fmt(r.excess)} грн; 3.2.1 = ${fmt(r.decrease)} грн`
-                      : `Період не заповнено: позначте «період заповнено» (${tm})`;
+                      : `Період порожній: внесіть дані періоду (${tm})`;
   document.querySelectorAll(".recalc-msg").forEach(m => m.textContent = text);
   document.querySelectorAll("#kpis .kpi, #debtSum .kpi").forEach(k=>{ k.classList.remove("flash"); void k.offsetWidth; k.classList.add("flash"); });
 }
@@ -677,4 +727,7 @@ function renderCase(){
   box.classList.toggle("hidden", !has);
 }
 renderCase();
+window.addEventListener("beforeunload", e => { if (unsaved()){ e.preventDefault(); e.returnValue = ""; } });
 renderAll();
+
+renderSaveState();
