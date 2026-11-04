@@ -21,7 +21,8 @@ const defaultMethod = () => ({includeDecInObject:false, decreaseWhenTestFails:tr
 /* міграція збережених даних попередньої версії */
 function migrate(s){
   s.method = Object.assign(defaultMethod(), s.method||{});
-  s.meta = Object.assign({regime:"auto", wpIndex:""}, s.meta||{});
+  s.meta = Object.assign({regime:"auto", docNo:"", docDate:""}, s.meta||{});
+  if (s.meta.wpIndex && !s.meta.docNo) s.meta.docNo = s.meta.wpIndex; delete s.meta.wpIndex;
   if (!s.schema){ s.method.includeDecInObject = false; }
   Object.values(s.periods||{}).forEach(p=>{
     p.debts = (p.debts||[]).map(d=>Object.assign(emptyDebt(), d));
@@ -34,7 +35,7 @@ function migrate(s){
 function blankState(){
   const periods = {}; PERIODS.forEach(p => periods[p.id] = emptyPeriod());
   periods.Q1.enabled = true;
-  return {schema:3, meta:{payer:"",edrpou:"",year:new Date().getFullYear(),kind:"general",preparer:"",reviewer:"",wpIndex:""},
+  return {schema:3, meta:{payer:"",edrpou:"",year:new Date().getFullYear(),kind:"general",preparer:"",reviewer:"",docNo:"",docDate:""},
           method:defaultMethod(), poolInitial:0, history:[], periods, active:"Q1"};
 }
 
@@ -281,8 +282,8 @@ function renderOutputs(){
   if (p.debts.length<=2 && new Set(p.debts.map(d=>d.name)).size<=1) add("warn","У тест включено одного кредитора. Підтвердіть повноту переліку боргових зобов'язань перед нерезидентами (ОСВ 50/55/60/68, позики, фінансова допомога).");
   const prevCtl = runPool(priorHistory(), S.poolInitial, S.method.haircut).filter(x=>x.diff!=null && Math.abs(x.diff)>0.5);
   prevCtl.forEach(x=>{ const n = String(x.note||"").trim();
-    if (n) add("warn",`Залишок пулу на кінець ${x.year} року відрізняється від даних платника на ${fmt(x.diff)} грн — пояснено: ${esc(n)}`);
-    else add("err",`Залишок пулу на кінець ${x.year} року не збігається з даними платника: розбіжність ${fmt(x.diff)} грн. Додайте пояснення на вкладці «Перенесення» або виправте дані.`); });
+    if (n) add("warn",`Залишок пулу на кінець ${x.year} року відрізняється від попереднього розрахунку на ${fmt(x.diff)} грн — пояснено: ${esc(n)}`);
+    else add("err",`Залишок пулу на кінець ${x.year} року не збігається з попереднім розрахунком: розбіжність ${fmt(x.diff)} грн. Додайте пояснення на вкладці «Перенесення» або виправте дані.`); });
   { const ys = priorHistory().map(h=>h.year).sort((a,b)=>a-b), gaps = [];
     for (let i=1;i<ys.length;i++) for (let y=ys[i-1]+1;y<ys[i];y++) gaps.push(y);
     if (ys.length && ys[ys.length-1] < num(S.meta.year)-1) for (let y=ys[ys.length-1]+1;y<num(S.meta.year);y++) gaps.push(y);
@@ -291,7 +292,7 @@ function renderOutputs(){
     if (h0 && num(S.poolInitial) && Math.abs(num(S.poolInitial)-num(h0.excess))<0.5) add("warn",`Залишок на 01.01.${h0.year} дорівнює перевищенню 3.1.1 цього ж року (${fmt(num(h0.excess))}). Перевірте, чи сума не врахована двічі: як залишок і як 3.1.1.`); }
   if (!priorHistory().length && !num(S.poolInitial)) add("warn","Історію перенесення не заповнено: залишок на початок року дорівнює 0.");
   if (S.active!=="Y") add("warn","Проміжний період. Остаточні суми 3.1.1/3.2.1 визначаються в річній декларації.");
-  if (!String(p.note).trim()) add("warn","Не зазначено джерела вхідних даних (МСА 230): додайте посилання на ОСВ, Ф1, Ф2, РІ.");
+  if (!String(p.note).trim()) add("warn","Не зазначено джерела вхідних даних для бухгалтерської довідки: додайте посилання на ОСВ, Ф1, Ф2, РІ.");
   $("#checks").innerHTML = ch.join("");
 }
 
@@ -397,7 +398,7 @@ function exportXlsx(){
   const M = model(); const wb = XLSX.utils.book_new();
   const meta = [["Платник",S.meta.payer],["ЄДРПОУ",S.meta.edrpou],["Звітний рік",S.meta.year],["Категорія",S.meta.kind==="fin"?"фінустанова/лізинг — п. 140.2 не застосовується":"загальна, поріг 3,5"],
     ["Ліміт",S.method.cap],["Щорічне зменшення",S.method.haircut],["3.2.1 в ООПП",S.method.includeDecInObject?"так":"ні"],
-    ["Зменшення при невиконаному тесті",S.method.decreaseWhenTestFails?"так":"ні"],["Підготував",S.meta.preparer],["Перевірив",S.meta.reviewer],
+    ["Зменшення при невиконаному тесті",S.method.decreaseWhenTestFails?"так":"ні"],["Виконавець",S.meta.preparer],["Головний бухгалтер",S.meta.reviewer],["Довідка №",S.meta.docNo],["Дата довідки",S.meta.docDate],
     ["Сформовано",new Date().toLocaleString("uk-UA")]];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(meta), "Параметри");
   const pool = [["Рік","Залишок на початок (після −5%)","3.1.1 (+)","3.2.1 (−)","Залишок на кінець","Контроль платника","Розбіжність","Пояснення"]]
@@ -417,9 +418,6 @@ function exportXlsx(){
 const r2 = v => Math.round(v*100)/100;
 
 /* ==================== Робочий документ для друку · бланк АСА ==================== */
-const ASA = { name:"ТОВ АФ «АЛЕКС С. АУДИТ»", codes:"Код ЄДРПОУ 23394504 · Номер у Реєстрі САД 1497",
-  addr:"вул. Олександра Лазаревського, 9, офіс 91, Київ, 02094", contact:"+38 (044) 230 6968 · info@alexsaudit.com",
-  desc:"Аудит · Облік · Консалтинг", site:"www.alexsaudit.com" };
 const pct = v => (Math.round(v*1000)/10).toString().replace(".",",")+" %";
 
 function periodSection(pid, n){
@@ -442,39 +440,43 @@ function periodSection(pid, n){
      <tr><td>Рядок 3.1.1: збільшення фінансового результату (п. 140.2)</td><td class="n">${fmt(r.excess)}</td></tr>
      <tr><td>Рядок 3.2.1: зменшення фінансового результату (п. 140.3)</td><td class="n">${fmt(r.decrease)}</td></tr>
      <tr><td>Залишок процентів на перенесення на кінець періоду</td><td class="n">${fmt(r.closing)}</td></tr></tbody></table>
-   <h3>${n}.3. Контрольні процедури</h3><ul>${checks}</ul>
+   <h3>${n}.3. Контрольні перевірки розрахунку</h3><ul>${checks}</ul>
    <div><b>Джерела даних / примітка:</b> ${String(p.note).trim()?esc(p.note):"—"}</div>`;
 }
 function printWorkingPaper(mode){
   const M = model();
   const pids = mode==="all" ? PERIODS.filter(x=>S.periods[x.id].enabled).map(x=>x.id) : [S.active];
   if (!pids.length || !M.results[pids[0]]){ alert("Період не заповнено: немає що друкувати."); return; }
-  const pool = M.pool.map(x=>`<tr><td class="c">${x.year}${x.auto?"*":""}</td><td class="n">${fmt(x.opening)}</td><td class="n">${fmt(x.excess)}</td><td class="n">${fmt(x.used)}</td><td class="n">${fmt(x.closing)}</td><td class="n">${x.control==null?"—":fmt(num(x.control))}</td><td class="n">${x.diff==null?"—":fmt(x.diff)}</td><td>${esc(x.note||"")||"—"}</td></tr>`).join("");
-  const m = S.method, logo = $("#logoTpl").innerHTML;
+  const fn = [];
+  const pool = M.pool.map(x=>`<tr><td class="c">${x.year}${x.auto?"*":""}</td><td class="n">${fmt(x.opening)}</td><td class="n">${fmt(x.excess)}</td><td class="n">${fmt(x.used)}</td><td class="n">${fmt(x.closing)}</td><td class="n">${x.control==null?"—":fmt(num(x.control))}</td><td class="n">${x.diff==null?"—":fmt(x.diff)}</td><td class="c">${x.note? "прим. "+fn.push(x.year+": "+x.note) : "—"}</td></tr>`).join("");
+  const m = S.method;
   const today = new Date().toLocaleDateString("uk-UA",{day:"2-digit",month:"2-digit",year:"numeric"});
+  const dd = S.meta.docDate ? new Date(S.meta.docDate+"T00:00:00").toLocaleDateString("uk-UA",{day:"2-digit",month:"2-digit",year:"numeric"}) : "____________";
+  const per = pids.map(id=>PERIODS.find(x=>x.id===id).label).join(", ");
   $("#printArea").innerHTML = `
-   <div class="lh">${logo}<div><div class="nm">${ASA.name}</div><div class="rq">${ASA.codes}<br>${ASA.addr}<br>${ASA.contact}</div></div></div>
-   <div class="lh-line"><span class="ds">${ASA.desc}</span><span class="ws">${ASA.site}</span></div>
-   <div class="body1">
-   <h1>Робочий документ: різниці за борговими зобов'язаннями з нерезидентами</h1>
+   <div class="ent"><div class="ent-nm">${esc(S.meta.payer||"__________________________")}</div>
+     <div class="ent-rq">Код ЄДРПОУ ${esc(S.meta.edrpou||"__________")}</div></div>
+   <div class="doc-title">БУХГАЛТЕРСЬКА ДОВІДКА № ${esc(S.meta.docNo||"____")}</div>
+   <div class="doc-date">від ${dd}</div>
+   <div class="doc-sub">Розрахунок різниць, які виникають при здійсненні операцій з борговими зобов'язаннями з нерезидентами
+     (п. 140.2–140.3 ст. 140 Податкового кодексу України), за ${esc(per)} ${esc(S.meta.year)} року</div>
    <table class="meta"><tbody>
-     <tr><td>Клієнт:</td><td><b>${esc(S.meta.payer||"—")}</b>${S.meta.edrpou?", код ЄДРПОУ "+esc(S.meta.edrpou):""}</td></tr>
-     <tr><td>Звітний рік:</td><td>${esc(S.meta.year)} · ${pids.map(id=>PERIODS.find(x=>x.id===id).label).join(", ")}</td></tr>
-     <tr><td>Індекс РД:</td><td>${esc(S.meta.wpIndex||"—")}</td></tr>
-     <tr><td>Підстава:</td><td>п. 140.1–140.3 ст. 140 ПКУ (редакція з 01.01.2021); Додаток РІ, рядки 3.1.1, 3.2.1</td></tr>
-     <tr><td>Редакція:</td><td>${esc(REGIMES[regimeOf(S.meta)].label)}</td></tr>
-     <tr><td>Метод:</td><td class="small">щорічне зменшення перенесених процентів ${pct(m.haircut)};
+     <tr><td>Підстава:</td><td>п. 140.1–140.3 ст. 140 ПКУ; Додаток РІ до податкової декларації з податку на прибуток, рядки 3.1.1, 3.2.1</td></tr>
+     <tr><td>Редакція норми:</td><td>${esc(REGIMES[regimeOf(S.meta)].label)}</td></tr>
+     <tr><td>Методика:</td><td class="small">щорічне зменшення перенесених процентів ${pct(m.haircut)};
        3.2.1 в об'єкті оподаткування: ${m.includeDecInObject?"враховується (буквальне прочитання)":"не враховується (механізм консультації ДПС)"};
-       зменшення за 3.2.1, коли тест 3,5× не виконано: ${m.decreaseWhenTestFails?"дозволено в межах ліміту":"не нараховується"}.</td></tr>
+       зменшення за 3.2.1, коли тест «3,5 раза» не виконано: ${m.decreaseWhenTestFails?"дозволено в межах ліміту":"не нараховується"}.</td></tr>
    </tbody></table>
    ${pids.map((id,i)=>periodSection(id,i+1)).join('<div style="break-before:page"></div>')}
    <h2>${pids.length+1}. Перенесення процентів (п. 140.3)</h2>
-   <table><thead><tr><th class="c">Рік</th><th class="n">На початок (після −5 %), грн</th><th class="n">3.1.1 (+), грн</th><th class="n">3.2.1 (−), грн</th><th class="n">На кінець, грн</th><th class="n">За даними платника, грн</th><th class="n">Розбіжність, грн</th><th>Пояснення</th></tr></thead><tbody>${pool}</tbody></table>
+   <table><thead><tr><th class="c">Рік</th><th class="n">На початок (після −5 %), грн</th><th class="n">3.1.1 (+), грн</th><th class="n">3.2.1 (−), грн</th><th class="n">На кінець, грн</th><th class="n">За попереднім розрахунком, грн</th><th class="n">Розбіжність, грн</th><th>Пояснення</th></tr></thead><tbody>${pool}</tbody></table>
+   ${fn.length?`<div class="small"><b>Пояснення розбіжностей:</b> ${fn.map((t,k)=>`прим. ${k+1} — ${esc(t)}`).join("; ")}.</div>`:""}
    <div class="small">* Рядок звітного року сформовано за останнім заповненим періодом. Від'ємні значення наведено в дужках.</div>
-   <div class="sig"><div>Підготував: ${esc(S.meta.preparer||"")}<br>Дата ____________ Підпис ____________</div>
-   <div>Перевірив: ${esc(S.meta.reviewer||"")}<br>Дата ____________ Підпис ____________</div></div>
-   <div class="small" style="margin-top:8mm">Сформовано ${today} у ThinCap 140. Інструмент підтримує професійне судження аудитора, але не замінює його.</div>
-   </div>`;
+   <div class="sig">
+     <div><div class="sig-role">Виконавець</div><div class="sig-line">____________________</div><div class="sig-name">${esc(S.meta.preparer||"(ПІБ)")}</div></div>
+     <div><div class="sig-role">Головний бухгалтер</div><div class="sig-line">____________________</div><div class="sig-name">${esc(S.meta.reviewer||"(ПІБ)")}</div></div>
+   </div>
+   <div class="small" style="margin-top:8mm">Сформовано ${today} за допомогою програми ThinCap 140.</div>`;
   document.body.classList.add("wp");
   const done = () => { document.body.classList.remove("wp"); window.removeEventListener("afterprint", done); };
   window.addEventListener("afterprint", done);

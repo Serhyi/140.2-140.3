@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Збирання ThinCap 140 в один офлайн-HTML.
 
-Вбудовує: шрифти (base64 woff2, latin + cyrillic), логотип (inline SVG), QR АСА, app.js і дані кейсу.
+Вбудовує: шрифти (base64 woff2, latin + cyrillic), логотип (inline SVG), app.js і дані кейсу.
 
   python3 build.py                                   # демо-версія -> dist/thincap-140.html
   python3 build.py --case cases/<кейс>.case.json --out cases/<кейс>.html   # версія з даними клієнта (не комітиться)
@@ -54,11 +54,6 @@ def main():
     svg = re.sub(r"<\?xml[^>]*\?>", "", svg).strip()
     svg = re.sub(r'\sid="[^"]*"', "", svg)
     svg = svg.replace("<svg ", '<svg class="logo" role="img" aria-label="Логотип ТОВ АФ «Алекс С. Аудит»" ', 1)
-    qr = "data:image/png;base64," + b64(brand / "assets/qr/qr-alexsaudit.png")
-    # Поле сторінки (@page margin box) не масштабує content:url(); SVG-обгортка задає фізичний розмір 12 × 12 мм
-    qr_svg = ('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="12mm" height="12mm" viewBox="0 0 100 100">'
-              f'<image width="100" height="100" xlink:href="{qr}"/></svg>')
-    qr_svg = "data:image/svg+xml;base64," + base64.b64encode(qr_svg.encode()).decode()
 
     html = (root / "src/app.html").read_text(encoding="utf-8")
     js = (root / "src/app.js").read_text(encoding="utf-8")
@@ -67,7 +62,6 @@ def main():
     js = js.replace("/*@@CASE@@*/null", case_js)
     html = (html.replace("/*@@FONTS@@*/", "\n".join(faces))
                 .replace("@@LOGO@@", svg)
-                .replace("@@QR_ASA_SVG@@", qr_svg)
                 .replace("/*@@APPJS@@*/", js))
     assert "@@" not in html, "не всі плейсхолдери замінено"
     out = pathlib.Path(a.out); out.parent.mkdir(parents=True, exist_ok=True)
