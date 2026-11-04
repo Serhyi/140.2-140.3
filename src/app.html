@@ -23,6 +23,7 @@
   --err-bg:#FEE2E2; --err-tx:#B91C1C; --err-bd:#DC2626;
   --info-bg:#DBEAFE; --info-tx:#1D4ED8; --info-bd:#2563EB;
   --logo-fill:#00854B; --input:#FFFFFF; --cur:var(--p50);
+  --gold-bg:#F5E6B8; --gold-bg-h:#EDD89A; --gold-bd:#8A6D1E; --gold-tx:#7A6019;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
@@ -34,6 +35,7 @@
     --err-bg:#3A1414; --err-tx:#FCA5A5; --err-bd:#DC2626;
     --info-bg:#132447; --info-tx:#93C5FD; --info-bd:#2563EB;
     --logo-fill:#FFFFFF; --input:var(--n950); --cur:#0F2A1D;
+    --gold-bg:#3A2F12; --gold-bg-h:#4A3C17; --gold-bd:#C49B2A; --gold-tx:#F5E6B8;
   }
 }
 :root[data-theme="dark"]{
@@ -45,6 +47,7 @@
   --err-bg:#3A1414; --err-tx:#FCA5A5; --err-bd:#DC2626;
   --info-bg:#132447; --info-tx:#93C5FD; --info-bd:#2563EB;
   --logo-fill:#FFFFFF; --input:var(--n950); --cur:#0F2A1D;
+  --gold-bg:#3A2F12; --gold-bg-h:#4A3C17; --gold-bd:#C49B2A; --gold-tx:#F5E6B8;
 }
 *{box-sizing:border-box}
 html,body{margin:0}
@@ -79,6 +82,9 @@ nav.tabs button[aria-selected="true"]{color:var(--accent-text);border-bottom-col
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 .btn.primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
 .btn.ghost{border-color:transparent;background:none;color:var(--accent-text)}
+/* Жовті кнопки роботи з файлом завдання — функціональний акцент Gold (Brand Guide, розд. 06–07) */
+.btn.gold{background:var(--gold-bg);border-color:var(--gold-bd);color:var(--gold-tx)}
+.btn.gold:hover{background:var(--gold-bg-h)}
 .btn.ghost:hover{background:var(--tint)}
 .btn.icon{min-width:44px;padding:8px}
 .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
@@ -238,8 +244,8 @@ footer.app{border-top:1px solid var(--border);color:var(--muted);font-size:11px;
     <button class="btn primary" data-wp="cur">🖨 Друк робочого документа</button>
     <button class="btn" data-wp="all">Друк: усі періоди</button>
     <button class="btn" id="btnXlsx">Експорт у Excel</button>
-    <button class="btn" id="btnSave">Зберегти JSON</button>
-    <label class="btn" for="fileLoad" tabindex="0">Завантажити JSON</label><input type="file" id="fileLoad" accept=".json,application/json" class="hidden">
+    <button class="btn gold" id="btnSave">Зберегти JSON</button>
+    <label class="btn gold" for="fileLoad" tabindex="0">Завантажити JSON</label><input type="file" id="fileLoad" accept=".json,application/json" class="hidden">
     <button class="btn ghost" id="btnPrint">Друк екрана</button>
     <button class="btn ghost" id="btnExample">Завантажити приклад</button>
     <button class="btn ghost" id="btnNew">Новий розрахунок</button>
