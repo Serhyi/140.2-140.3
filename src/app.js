@@ -529,16 +529,43 @@ document.addEventListener("click", e => {
 });
 $("#fileLoad").addEventListener("change", async e => {
   const f = e.target.files[0]; if (!f) return;
-  try{ const o = JSON.parse(await f.text()); if (!o.periods || !o.meta) throw new Error("невірна структура");
-    S=migrate(o); persist(); renderAll(); }
+  try{
+    let o = JSON.parse(await f.text());
+    // файл кейсу ({title, state, notesHtml}) — беремо state
+    if (o && o.state && !o.meta) o = o.state;
+    // приймаємо нову структуру (years) і стару (periods одного року)
+    if (!o || typeof o!=="object" || !o.meta || !(o.years || o.periods))
+      throw new Error("це не файл даних ThinCap 140 (немає розділів meta / years)");
+    S = migrate(o); persist(); renderAll();
+    const ys = Object.keys(S.years).sort().join(", ");
+    document.querySelectorAll(".recalc-msg").forEach(m => m.textContent = `Завантажено «${f.name}»: роки ${ys}.`);
+  }
   catch(err){ alert("Не вдалося завантажити файл: "+err.message); }
   e.target.value="";
 });
 
 function fileBase(){ return ("Різниці_140_"+(S.meta.payer||"платник")+"_"+S.meta.year).replace(/[\\/:*?"<>|«»]/g,"").replace(/\s+/g,"_"); }
+/* Збереження файлу. Chrome/Edge — вікно «Зберегти як» (зберігає кириличну назву, дає обрати папку).
+   Інакше — завантаження з латинською назвою: для сторінок file:// Chrome ігнорує нелатинські назви і тип application/json. */
+const TR = {а:"a",б:"b",в:"v",г:"h",ґ:"g",д:"d",е:"e",є:"ie",ж:"zh",з:"z",и:"y",і:"i",ї:"i",й:"i",к:"k",л:"l",м:"m",н:"n",о:"o",п:"p",р:"r",с:"s",т:"t",у:"u",ф:"f",х:"kh",ц:"ts",ч:"ch",ш:"sh",щ:"shch",ь:"",ю:"iu",я:"ia","'":"","’":"",ё:"e",ы:"y",э:"e",ъ:""};
+const isUp = c => !!c && c!==c.toLowerCase();
+const latin = n => { const ch = n.split("");
+  return ch.map((c,i)=>{ const l=c.toLowerCase(), t=TR[l]; if (t==null) return c; if (c===l) return t;
+    return (isUp(ch[i-1]) || isUp(ch[i+1])) ? t.toUpperCase() : t.charAt(0).toUpperCase()+t.slice(1); }).join("").replace(/[^A-Za-z0-9._-]+/g,"_"); };
+async function saveFile(name, blob, desc, ext, mime){
+  if (window.showSaveFilePicker){
+    try{ const h = await window.showSaveFilePicker({suggestedName:name, types:[{description:desc, accept:{[mime]:[ext]}}]});
+      const w = await h.createWritable(); await w.write(blob); await w.close(); return true; }
+    catch(err){ if (err && err.name==="AbortError") return false; /* інша помилка — запасний спосіб */ }
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([blob], {type:"application/octet-stream"}));
+  a.download = latin(name); a.style.display = "none"; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  return true;
+}
 function saveJson(){
-  const blob = new Blob([JSON.stringify(S,null,2)],{type:"application/json"});
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = fileBase()+".json"; a.click(); URL.revokeObjectURL(a.href);
+  return saveFile(fileBase()+".json", new Blob([JSON.stringify(S,null,2)],{type:"application/json"}), "Дані ThinCap 140 (JSON)", ".json", "application/json");
 }
 function exportXlsx(){
   if (typeof XLSX === "undefined"){ alert("Бібліотека Excel не завантажилась (немає мережі). Скористайтеся «Зберегти JSON» або «Друк / PDF»."); return; }
@@ -560,7 +587,8 @@ function exportXlsx(){
       ["РІ 3.1.1",r2(r.excess)],["РІ 3.2.1",r2(r.decrease)],["Залишок на перенесення",r2(r.closing)],[],["Примітка",p.note]]);
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(a), pd.id);
   });
-  XLSX.writeFile(wb, fileBase()+".xlsx");
+  const buf = XLSX.write(wb, {bookType:"xlsx", type:"array"});
+  saveFile(fileBase()+".xlsx", new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}), "Книга Excel", ".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 }
 const r2 = v => Math.round(v*100)/100;
 
