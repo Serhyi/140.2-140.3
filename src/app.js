@@ -282,8 +282,8 @@ function renderOutputs(){
   if (p.debts.length<=2 && new Set(p.debts.map(d=>d.name)).size<=1) add("warn","У тест включено одного кредитора. Підтвердіть повноту переліку боргових зобов'язань перед нерезидентами (ОСВ 50/55/60/68, позики, фінансова допомога).");
   const prevCtl = runPool(priorHistory(), S.poolInitial, S.method.haircut).filter(x=>x.diff!=null && Math.abs(x.diff)>0.5);
   prevCtl.forEach(x=>{ const n = String(x.note||"").trim();
-    if (n) add("warn",`Залишок пулу на кінець ${x.year} року відрізняється від попереднього розрахунку на ${fmt(x.diff)} грн — пояснено: ${esc(n)}`);
-    else add("err",`Залишок пулу на кінець ${x.year} року не збігається з попереднім розрахунком: розбіжність ${fmt(x.diff)} грн. Додайте пояснення на вкладці «Перенесення» або виправте дані.`); });
+    if (n) add("warn",`Залишок пулу на кінець ${x.year} року відрізняється від залишку за декларацією на ${fmt(x.diff)} грн — пояснено: ${esc(n)}`);
+    else add("err",`Залишок пулу на кінець ${x.year} року не збігається із залишком за декларацією: розбіжність ${fmt(x.diff)} грн. Додайте пояснення на вкладці «Перенесення» або виправте дані.`); });
   { const ys = priorHistory().map(h=>h.year).sort((a,b)=>a-b), gaps = [];
     for (let i=1;i<ys.length;i++) for (let y=ys[i-1]+1;y<ys[i];y++) gaps.push(y);
     if (ys.length && ys[ys.length-1] < num(S.meta.year)-1) for (let y=ys[ys.length-1]+1;y<num(S.meta.year);y++) gaps.push(y);
@@ -469,7 +469,7 @@ function printWorkingPaper(mode){
    </tbody></table>
    ${pids.map((id,i)=>periodSection(id,i+1)).join('<div style="break-before:page"></div>')}
    <h2>${pids.length+1}. Перенесення процентів (п. 140.3)</h2>
-   <table><thead><tr><th class="c">Рік</th><th class="n">На початок (після −5 %), грн</th><th class="n">3.1.1 (+), грн</th><th class="n">3.2.1 (−), грн</th><th class="n">На кінець, грн</th><th class="n">За попереднім розрахунком, грн</th><th class="n">Розбіжність, грн</th><th>Пояснення</th></tr></thead><tbody>${pool}</tbody></table>
+   <table><thead><tr><th class="c">Рік</th><th class="n">На початок (після −5 %), грн</th><th class="n">3.1.1 (+), грн</th><th class="n">3.2.1 (−), грн</th><th class="n">На кінець, грн</th><th class="n">За декларацією, грн</th><th class="n">Розбіжність, грн</th><th>Пояснення</th></tr></thead><tbody>${pool}</tbody></table>
    ${fn.length?`<div class="small"><b>Пояснення розбіжностей:</b> ${fn.map((t,k)=>`прим. ${k+1} — ${esc(t)}`).join("; ")}.</div>`:""}
    <div class="small">* Рядок звітного року сформовано за останнім заповненим періодом. Від'ємні значення наведено в дужках.</div>
    <div class="sig">
