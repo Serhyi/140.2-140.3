@@ -328,6 +328,12 @@ footer.app{border-top:1px solid var(--border);color:var(--muted);font-size:11px;
             <option value="general">Загальна (поріг 3,5)</option>
             <option value="fin">Фінансова установа / виключно лізингова діяльність (п. 140.2 не застосовується)</option>
           </select></label>
+          <label class="f">Редакція п. 140.2<select data-m="regime">
+            <option value="auto">Автоматично за звітним роком</option>
+            <option value="pre2021">До 01.01.2021: 50 % × (ФРО + ФВ + АВ), лише пов'язані нерезиденти</option>
+            <option value="y2021early">2021, ранній підхід ДПС: 0,3 × ООПП + ФВ + АВ</option>
+            <option value="current">З 01.01.2021 (позиція ДПС з 09.2021): 0,3 × (ООПП + ФВ + АВ)</option>
+          </select><span class="src">Для перевірки сум 3.1.1 / 3.2.1 минулих років, задекларованих за іншою редакцією</span></label>
           <label class="f">Підготував<input data-m="preparer"></label>
           <label class="f">Перевірив<input data-m="reviewer"></label>
         </div>

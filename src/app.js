@@ -21,6 +21,7 @@ const defaultMethod = () => ({includeDecInObject:false, decreaseWhenTestFails:tr
 /* міграція збережених даних попередньої версії */
 function migrate(s){
   s.method = Object.assign(defaultMethod(), s.method||{});
+  s.meta = Object.assign({regime:"auto", wpIndex:""}, s.meta||{});
   if (!s.schema){ s.method.includeDecInObject = false; }
   Object.values(s.periods||{}).forEach(p=>{
     p.debts = (p.debts||[]).map(d=>Object.assign(emptyDebt(), d));
@@ -72,11 +73,29 @@ function runVintages(history, initial, haircut){
   return {cols: vint.map(v=>v.year), matrix};
 }
 
+/* Редакції п. 140.2 (норма 140.3 — зменшення на 5 % — не змінювалась) */
+const REGIMES = {
+  pre2021:   {label:"До 01.01.2021: 50 % × (ФРО + ФВ + АВ), лише пов'язані нерезиденти",
+              short:"до 2021", cap:0.5},
+  y2021early:{label:"2021, ранній підхід ДПС (до 09.2021): 0,3 × ООПП + ФВ + АВ",
+              short:"2021 (ранній підхід ДПС)", cap:0.3},
+  current:   {label:"З 01.01.2021, позиція ДПС з 09.2021: 0,3 × (ООПП + ФВ + АВ)",
+              short:"чинна", cap:0.3}
+};
+function regimeOf(meta){
+  if (meta.regime && meta.regime!=="auto" && REGIMES[meta.regime]) return meta.regime;
+  return num(meta.year) < 2021 ? "pre2021" : "current";
+}
+
 /* Period engine */
 function calcPeriod(p, meta, method, poolOpening){
-  const k = 3.5;
-  const notApplicable = meta.kind === "fin";
-  const debtAvg = p.debts.reduce((s,d)=> s + (num(d.open)+num(d.close))/2, 0);
+  const rg = regimeOf(meta), pre = rg==="pre2021", early = rg==="y2021early";
+  // до 2021: фінустанови / лізинг — поріг 10; з 2021 — норма не застосовується
+  const k = (pre && meta.kind==="fin") ? 10 : 3.5;
+  const notApplicable = !pre && meta.kind === "fin";
+  // до 2021 враховуються лише боргові зобов'язання і проценти перед ПОВ'ЯЗАНИМИ нерезидентами
+  const inScope = d => !pre || d.cat === "related";
+  const debtAvg = p.debts.filter(inScope).reduce((s,d)=> s + (num(d.open)+num(d.close))/2, 0);
   const eqAvg = (num(p.eqOpen)+num(p.eqClose))/2;
   const eqNonPos = eqAvg <= 0;
   const testMet = !notApplicable && (eqNonPos ? debtAvg > 0 : debtAvg > k*eqAvg);
@@ -84,26 +103,33 @@ function calcPeriod(p, meta, method, poolOpening){
 
   const grossInt = p.debts.reduce((s,d)=>s+num(d.interest),0);
   const tpAdj    = p.debts.reduce((s,d)=>s+num(d.tpAdj),0);
-  const exclCat  = p.debts.reduce((s,d)=>s+(CATS[d.cat]?.excl ? num(d.interest)-num(d.tpAdj) : 0),0);
-  const SP = Math.max(0, grossInt - tpAdj - exclCat) + num(p.capAmort);
-  const O0 = num(p.fro) + num(p.incOther) - num(p.decOther);         // ООПП без збитків, 3.1.1, 3.2.1
+  // виключення: з 2021 — банки/МФО; до 2021 — усі, хто не є пов'язаною особою
+  const exclCat  = p.debts.reduce((s,d)=>s+((pre ? d.cat!=="related" : CATS[d.cat]?.excl) ? num(d.interest)-num(d.tpAdj) : 0),0);
+  const capAmort = pre ? 0 : num(p.capAmort);          // абз. 5 введено з 2021
+  const SP = Math.max(0, grossInt - tpAdj - exclCat) + capAmort;
+  // до 2021 — ФРО за фінзвітністю (без різниць); з 2021 — ООПП
+  const O0 = pre ? num(p.fro) : num(p.fro) + num(p.incOther) - num(p.decOther);
   const K  = num(p.fv) + num(p.av);
+  const cap = pre ? 0.5 : method.cap;
+  const indicator = early ? cap*O0 + K : cap*(O0 + K);   // сума, від якої рахується ліміт
   const base = O0 + K;
-  const cap = method.cap;
-  const limit = Math.max(0, cap*base);
-  const negative = base <= 0;
+  const limit = Math.max(0, indicator);
+  const negative = early ? indicator <= 0 : base <= 0;
 
-  const excess = testMet ? Math.max(0, SP - limit) : 0;
+  const excess = testMet ? (negative ? SP : Math.max(0, SP - limit)) : 0;
   let capacity = 0;
-  if (!notApplicable && (testMet || method.decreaseWhenTestFails)){
-    capacity = method.includeDecInObject ? Math.max(0, (cap*base - SP)/(1+cap)) : Math.max(0, limit - SP);
+  if (!notApplicable && !negative && (testMet || method.decreaseWhenTestFails)){
+    // буквальне прочитання (3.2.1 входить в ООПП): ліміт(D) = indicator − cap·D → D = (indicator − SP)/(1+cap);
+    // до 2021 база — ФРО, на яку 3.2.1 не впливає
+    capacity = (method.includeDecInObject && !pre) ? Math.max(0, (indicator - SP)/(1+cap)) : Math.max(0, limit - SP);
   }
   const pool = Math.max(0, poolOpening);
   const decrease = excess > 0 ? 0 : Math.min(pool, capacity);
   const closing = poolOpening + excess - decrease;
-  const deductible = SP - excess + decrease;   // сума процентів, що фактично зменшує базу
-  return {k, notApplicable, grossInt, tpAdj, exclCat, debtAvg, eqAvg, eqNonPos, testMet, ratio, SP, O0, K, base, limit, negative, excess, capacity, decrease, pool:poolOpening, closing, deductible,
-          limitFinal: method.includeDecInObject ? Math.max(0, cap*(base - decrease)) : limit};
+  const deductible = SP - excess + decrease;
+  return {rg, k, cap, notApplicable, grossInt, tpAdj, exclCat, capAmort, debtAvg, eqAvg, eqNonPos, testMet, ratio, SP, O0, K, base, indicator, limit, negative,
+          excess, capacity, decrease, pool:poolOpening, closing, deductible,
+          limitFinal: (method.includeDecInObject && !pre) ? Math.max(0, indicator - cap*decrease) : limit};
 }
 
 /* ==================== Utils ==================== */
@@ -192,7 +218,7 @@ function renderOutputs(){
     + kp("Проценти у витратах, грн", fmt(r.grossInt)) + kp("з них за ст. 39, грн", fmt(r.tpAdj)) + kp("Виключено (банки / МФО), грн", fmt(r.exclCat));
   $("#spOut").textContent = fmt(r.SP);
   $("#testOut").innerHTML = r.notApplicable ? '<span class="badge b-info">Не застосовується</span> Фінансова установа / лізингова компанія: п. 140.2 не застосовується (останній абзац п. 140.2).' :
-   `<div>Середній власний капітал: <b class="mono">${fmt(r.eqAvg)}</b> грн · 3,5 × капітал: <b class="mono">${fmt(r.k*r.eqAvg)}</b> грн · співвідношення: <b>${r.ratio==null?"капітал ≤ 0":r.ratio.toFixed(2).replace(".",",")+"×"}</b></div>
+   `<div>Середній власний капітал: <b class="mono">${fmt(r.eqAvg)}</b> грн · ${String(r.k).replace(".",",")} × капітал: <b class="mono">${fmt(r.k*r.eqAvg)}</b> грн · співвідношення: <b>${r.ratio==null?"капітал ≤ 0":r.ratio.toFixed(2).replace(".",",")+"×"}</b></div>
     <div style="margin-top:6px">${r.testMet?'<span class="badge b-err">Умова виконана</span> обмеження за п. 140.2 застосовується':'<span class="badge b-ok">Умова не виконана</span> збільшення за 3.1.1 не виникає'}</div>
     ${r.eqNonPos && r.debtAvg>0 ? '<div class="muted" style="margin-top:6px">Власний капітал від\'ємний або нульовий: будь-яка сума боргу перевищує його більш ніж у 3,5 раза.</div>':''}`;
 
@@ -201,32 +227,36 @@ function renderOutputs(){
     + kp("Залишок на перенесення, грн", fmt(r.closing))
     + kp("Проценти, що зменшили базу, грн", fmt(r.deductible));
 
-  const c = S.method.cap, pc = Math.round(c*100);
+  const c = r.cap, pc = Math.round(c*100), pre = r.rg==="pre2021", early = r.rg==="y2021early";
+  const D = (S.method.includeDecInObject && !pre) ? " − "+c+"×D" : "";
   const rows = [
+    ["0","Редакція п. 140.2", REGIMES[r.rg].label, null],
     ["1","Залишок перенесених процентів на початок року (після −"+Math.round(S.method.haircut*100)+"%)","Пул: кінець "+(num(S.meta.year)-1)+" × "+(1-S.method.haircut).toFixed(2), r.pool],
     ["2а","Проценти перед нерезидентами, нараховані у витратах","Σ реєстру", r.grossInt],
     ["2б","мінус: скориговано за ст. 39 (не «витягнута рука»)","абз. 7, 8а п. 140.2", -r.tpAdj],
-    ["2в","мінус: проценти іноземним банкам / МФО з держгарантією","абз. 8б, 8в п. 140.2", -r.exclCat],
-    ["2г","плюс: частка амортизації капіталізованих процентів","абз. 5 п. 140.2", num(p.capAmort)],
+    ["2в", pre ? "мінус: проценти непов'язаним нерезидентам" : "мінус: проценти іноземним банкам / МФО з держгарантією", pre ? "до 2021 — лише пов'язані особи-нерезиденти" : "абз. 8б, 8в п. 140.2", -r.exclCat],
+    ["2г","плюс: частка амортизації капіталізованих процентів", pre ? "до 2021 не передбачено" : "абз. 5 п. 140.2", r.capAmort],
     ["2","СП: проценти, що підлягають обмеженню","(2а)+(2б)+(2в)+(2г)", r.SP],
     ["3","ФРО","Ф2", num(p.fro)],
-    ["4","Інші різниці (+/−), крім збитків, 3.1.1, 3.2.1","РІ", num(p.incOther)-num(p.decOther)],
-    ["5","ООПП₀: об'єкт для цілей п. 140.2","(3) + (4)", r.O0],
-    ["6","ФВ + АВ","Ф2 р. 2250 + податкова амортизація", r.K],
-    ["7","Показник: ООПП + ФВ + АВ","(5) + (6)", r.base],
-    ["8","Ліміт "+pc+"%","max(0; "+c+" × (7))"+(S.method.includeDecInObject?"; з урахуванням 3.2.1 в ООПП: "+c+"×((7) − D)":""), r.limitFinal],
-    ["9","РІ 3.1.1: перевищення","умова виконана ? max(0; (2) − "+c+"×(7)) : 0", r.excess],
-    ["10","Невикористаний ліміт для зменшення", S.method.includeDecInObject?"max(0; ("+c+"×(7) − (2)) / "+(1+c).toFixed(2)+")":"max(0; (8) − (2))", r.capacity],
+    ["4","Інші різниці (+/−), крім збитків, 3.1.1, 3.2.1", pre ? "до 2021 не враховуються (база — ФРО)" : "РІ", pre ? 0 : num(p.incOther)-num(p.decOther)],
+    ["5", pre ? "ФРО: база для цілей п. 140.2" : "ООПП₀: об'єкт для цілей п. 140.2","(3) + (4)", r.O0],
+    ["6","ФВ + АВ", pre ? "Ф2 р. 2250 + амортизація за фінзвітністю" : "Ф2 р. 2250 + податкова амортизація", r.K],
+    ["7", pre ? "Сума: ФРО + ФВ + АВ" : "Сума: ООПП + ФВ + АВ","(5) + (6)", r.base],
+    ["8","Ліміт", (early ? "max(0; "+c+" × (5) + (6))" : "max(0; "+c+" × (7))")+D, r.limitFinal],
+    ["9","РІ 3.1.1: перевищення","умова виконана ? (показник ≤ 0 ? (2) : max(0; (2) − (8))) : 0", r.excess],
+    ["10","Невикористаний ліміт для зменшення", D ? "max(0; (ліміт − (2)) / "+(1+c).toFixed(2)+")" : "max(0; (8) − (2))", r.capacity],
     ["11","РІ 3.2.1: зменшення","(9) > 0 ? 0 : min((1); (10))", r.decrease],
     ["12","Залишок на перенесення","(1) + (9) − (11)", r.closing],
   ];
-  $("#traceTbl tbody").innerHTML = rows.map(x=>`<tr><td class="c">${x[0]}</td><td>${esc(x[1])}</td><td class="formula">${esc(x[2])}</td><td class="n">${fmt(x[3])}</td></tr>`).join("");
+  $("#traceTbl tbody").innerHTML = rows.map(x=>`<tr><td class="c">${x[0]}</td><td>${esc(x[1])}</td><td class="formula">${esc(x[2])}</td><td class="n">${x[3]==null?"—":fmt(x[3])}</td></tr>`).join("");
 
   // checks — статус завжди дублюється словом (розд. 07)
   const ch = [];
   const TAG = {ok:"Успішно", warn:"Попередження", err:"Помилка"};
   const add = (lvl,t)=>ch.push(`<li class="${lvl}" data-lvl="${lvl}"><span class="tag">${TAG[lvl]}</span><span class="tx">${t}</span></li>`);
-  if (r.negative && r.SP>0) add("warn","Показник ООПП + ФВ + АВ ≤ 0. ФРО збільшується на <b>всю</b> суму процентів (абз. 4 п. 140.2), зменшення за 3.2.1 не виникає.");
+  if (r.negative && r.SP>0) add("warn",(r.rg==="pre2021"?"Сума ФРО + ФВ + АВ ≤ 0":r.rg==="y2021early"?"Показник 0,3 × ООПП + ФВ + АВ ≤ 0":"Показник ООПП + ФВ + АВ ≤ 0")+". ФРО збільшується на <b>всю</b> суму процентів, зменшення за 3.2.1 не виникає.");
+  if (r.rg==="pre2021") add("warn","Застосовано редакцію до 01.01.2021: тест і СП лише щодо <b>пов'язаних</b> осіб-нерезидентів; ліміт 50 % від ФРО + ФВ + АВ; АВ — за даними <b>фінансової</b> звітності; для фінустанов і лізингових компаній поріг 10 раз.");
+  if (num(S.meta.year)===2021) add("warn", r.rg==="y2021early" ? "2021 рік, ранній підхід ДПС (0,3 × ООПП + ФВ + АВ). З 09.2021 ДПС вимагає 0,3 × (ООПП + ФВ + АВ); річна декларація за 2021 рік подавалась уже після зміни позиції. Оцініть податковий ризик і наявність захисту за ст. 53 ПКУ." : "2021 рік: розраховано за позицією ДПС з 09.2021. Якщо платник декларував за раннім підходом (0,3 × ООПП + ФВ + АВ), перерахуйте з відповідною редакцією й оцініть різницю.");
   if (r.notApplicable) add("ok","Фінансова установа / компанія, що займається виключно лізингом: різниці за п. 140.2 не визначаються. Підтвердіть статус: ліцензія, реєстр фінансових установ, виключність лізингової діяльності.");
   if (r.grossInt > num(p.fv) + 0.5) add("err","Проценти перед нерезидентами ("+fmt(r.grossInt)+") більші за фінансові витрати Ф2 ("+fmt(num(p.fv))+"). Перевірте класифікацію або капіталізацію.");
   else add("ok","Проценти перед нерезидентами ≤ ФВ: вони вписуються у фінансові витрати Ф2.");
@@ -303,7 +333,7 @@ document.addEventListener("change", e => {
   const t = e.target;
   if (t.dataset.mm && t.type==="checkbox"){ S.method[t.dataset.mm] = t.checked; }
   else if (t.id==="perEnabled"){ S.periods[S.active].enabled = t.checked; }
-  else if (t.dataset.m==="kind"){ S.meta.kind = t.value; }
+  else if (t.dataset.m==="kind" || t.dataset.m==="regime"){ S.meta[t.dataset.m] = t.value; }
   else if (t.dataset.h!=null || t.id==="poolInitial" || t.dataset.m==="year"){ /* re-render pool table after edit */ }
   else if (t.classList?.contains("num")) { t.value = fmtIn(num(t.value)); persist(); return; }
   else return;
@@ -376,7 +406,7 @@ function periodSection(pid, n){
   S.active = saved; renderOutputs();
   const debts = p.debts.map((d,i)=>`<tr><td class="c">${i+1}</td><td>${esc(d.name)||"—"}</td><td>${esc(d.account)||"—"}</td><td>${esc(CATS[d.cat]?.label||"—")}</td><td class="n">${fmt(num(d.open))}</td><td class="n">${fmt(num(d.close))}</td><td class="n">${fmt((num(d.open)+num(d.close))/2)}</td><td class="n">${fmt(num(d.interest))}</td><td class="n">${fmt(num(d.tpAdj))}</td></tr>`).join("");
   const test = r.notApplicable ? "П. 140.2 не застосовується: фінансова установа або компанія, що займається виключно лізинговою діяльністю."
-    : `Середній борг ${fmt(r.debtAvg)} грн; середній власний капітал ${fmt(r.eqAvg)} грн; 3,5 × капітал = ${fmt(3.5*r.eqAvg)} грн; співвідношення: ${r.ratio==null?"капітал ≤ 0":r.ratio.toFixed(2).replace(".",",")+"×"}. <b>Умова п. 140.2 ${r.testMet?"виконана":"не виконана"}.</b>`;
+    : `Середній борг ${fmt(r.debtAvg)} грн; середній власний капітал ${fmt(r.eqAvg)} грн; ${String(r.k).replace(".",",")} × капітал = ${fmt(r.k*r.eqAvg)} грн; співвідношення: ${r.ratio==null?"капітал ≤ 0":r.ratio.toFixed(2).replace(".",",")+"×"}. <b>Умова п. 140.2 ${r.testMet?"виконана":"не виконана"}.</b>`;
   return `<h2>${n}. Період: ${esc(lbl)}</h2>
    <h3>${n}.1. Реєстр боргових зобов'язань перед нерезидентами і тест «3,5 раза»</h3>
    <table><thead><tr><th class="c">№</th><th>Кредитор</th><th>Рахунок / договір</th><th>Категорія</th><th class="n">Сальдо на початок, грн</th><th class="n">Сальдо на кінець, грн</th><th class="n">Середнє, грн</th><th class="n">Проценти, грн</th><th class="n">Ст. 39, грн</th></tr></thead>
@@ -408,7 +438,8 @@ function printWorkingPaper(mode){
      <tr><td>Звітний рік:</td><td>${esc(S.meta.year)} · ${pids.map(id=>PERIODS.find(x=>x.id===id).label).join(", ")}</td></tr>
      <tr><td>Індекс РД:</td><td>${esc(S.meta.wpIndex||"—")}</td></tr>
      <tr><td>Підстава:</td><td>п. 140.1–140.3 ст. 140 ПКУ (редакція з 01.01.2021); Додаток РІ, рядки 3.1.1, 3.2.1</td></tr>
-     <tr><td>Метод:</td><td class="small">ліміт ${pct(m.cap)} від (ООПП + ФВ + АВ); щорічне зменшення перенесених процентів ${pct(m.haircut)};
+     <tr><td>Редакція:</td><td>${esc(REGIMES[regimeOf(S.meta)].label)}</td></tr>
+     <tr><td>Метод:</td><td class="small">щорічне зменшення перенесених процентів ${pct(m.haircut)};
        3.2.1 в об'єкті оподаткування: ${m.includeDecInObject?"враховується (буквальне прочитання)":"не враховується (механізм консультації ДПС)"};
        зменшення за 3.2.1, коли тест 3,5× не виконано: ${m.decreaseWhenTestFails?"дозволено в межах ліміту":"не нараховується"}.</td></tr>
    </tbody></table>
