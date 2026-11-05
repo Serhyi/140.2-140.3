@@ -66,13 +66,15 @@ def main():
     case = json.loads(pathlib.Path(a.case).read_text(encoding="utf-8"))
     case_js = json.dumps(case, ensure_ascii=False).replace("</", "<\\/")  # безпечно всередині <script>
     js = js.replace("/*@@CASE@@*/null", case_js)
+    version = (root / "VERSION").read_text(encoding="utf-8").strip()
     html = (html.replace("/*@@FONTS@@*/", "\n".join(faces))
                 .replace("@@LOGO@@", svg)
-                .replace("/*@@APPJS@@*/", js))
+                .replace("/*@@APPJS@@*/", js)
+                .replace("@@VERSION@@", version))
     assert "@@" not in html, "не всі плейсхолдери замінено"
     out = pathlib.Path(a.out); out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html, encoding="utf-8")
-    print(f"{a.out}: {len(html.encode())/1024:.0f} КБ")
+    print(f"{a.out}: {len(html.encode())/1024:.0f} КБ, версія {version}")
 
 
 if __name__ == "__main__":
