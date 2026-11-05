@@ -219,33 +219,10 @@ function renderSaveState(){
   el.innerHTML = !i ? `<span class="badge b-warn">Не збережено у файл</span> Натисніть «Зберегти JSON».`
     : unsaved() ? `<span class="badge b-warn">Є незбережені зміни</span> Останнє збереження: ${esc(i.name||"файл JSON")}, ${fmtDT(i.at)}.`
     : `<span class="badge b-ok">Збережено</span> ${i.loaded?"Завантажено з":"У файл"} ${esc(i.name||"JSON")}, ${fmtDT(i.at)}.`;
-  const cb = document.getElementById("btnCheckFile"); if (cb) cb.classList.toggle("hidden", !window.showSaveFilePicker);
 }
 /* дані для порівняння з файлом (без службових полів) */
 const dataKey = o => JSON.stringify({meta:o.meta, method:o.method, poolInitial:o.poolInitial, history:o.history,
   years:Object.fromEntries(Object.entries(o.years||{}).map(([y,v])=>[y, v.periods]))});
-/* IndexedDB: дескриптор останнього збереженого JSON (лише Chrome/Edge) */
-const idb = (mode, fn) => new Promise((res,rej)=>{ try{ const r = indexedDB.open("thincap140",1);
-  r.onupgradeneeded = ()=> r.result.createObjectStore("kv");
-  r.onsuccess = ()=>{ const tx = r.result.transaction("kv",mode), st = tx.objectStore("kv"), q = fn(st);
-    tx.oncomplete = ()=>res(q && q.result); tx.onerror = ()=>rej(tx.error); };
-  r.onerror = ()=>rej(r.error); }catch(e){ rej(e); } });
-let putHandle = h => idb("readwrite", st=>st.put(h,"jsonHandle")).catch(()=>{});
-let getHandle = () => idb("readonly", st=>st.get("jsonHandle")).catch(()=>null);
-async function checkFile(){
-  const show = (lvl,t) => { document.getElementById("saveState").innerHTML = `<span class="badge b-${lvl}">${lvl==="ok"?"Файл на місці":lvl==="warn"?"Увага":"Файл не знайдено"}</span> ${t}`; };
-  const h = await getHandle();
-  if (!h){ show("warn","З цього браузера ще не зберігали JSON через вікно «Зберегти як». Натисніть «Зберегти JSON»."); return; }
-  try{
-    let perm = await h.queryPermission({mode:"read"});
-    if (perm !== "granted") perm = await h.requestPermission({mode:"read"});
-    if (perm !== "granted"){ show("warn","Немає дозволу на читання файлу «"+esc(h.name)+"»."); return; }
-    const f = await h.getFile(), o = JSON.parse(await f.text());
-    const same = dataKey(migrate(o)) === dataKey(S);
-    show(same?"ok":"warn", same ? `«${esc(f.name)}» існує і містить поточні дані (змінено ${fmtDT(f.lastModified)}).`
-                               : `«${esc(f.name)}» існує, але дані у файлі відрізняються від поточних. Збережіть JSON ще раз.`);
-  }catch(err){ show("err", `Файл «${esc(h.name)}» не знайдено або його не вдалося прочитати (${esc(err.name||err.message)}). Збережіть JSON ще раз.`); }
-}
 
 /* ==================== Похідна модель ==================== */
 function latestPeriodIdOf(y){ const Y = S.years[String(y)]; if (!Y) return null;
@@ -574,10 +551,8 @@ document.addEventListener("click", e => {
     S.history.push({year:y,excess:0,used:0,control:null}); persist(); renderAll(); return; }
   if (t.dataset.delh!=null){ S.history.splice(+t.dataset.delh,1); persist(); renderAll(); return; }
   if (t.id==="btnSave") return saveJson();
-  if (t.id==="btnCheckFile") return checkFile();
   if (t.id==="btnXlsx") return exportXlsx();
-  if (t.id==="btnPrint"){ document.body.classList.remove("wp"); return window.print(); }
-  if (t.dataset.wp) return printWorkingPaper(t.dataset.wp);
+  if (t.dataset.wp) return printWorkingPaper();
   if (t.id==="btnExample"){ if (confirm("Замінити поточні дані прикладом?")){ S=exampleState(); persist(); renderAll(); } return; }
   if (t.id==="btnNew"){ if (confirm("Очистити всі дані?")){ S=blankState(); persist(); renderAll(); } return; }
 });
@@ -609,10 +584,10 @@ const isUp = c => !!c && c!==c.toLowerCase();
 const latin = n => { const ch = n.split("");
   return ch.map((c,i)=>{ const l=c.toLowerCase(), t=TR[l]; if (t==null) return c; if (c===l) return t;
     return (isUp(ch[i-1]) || isUp(ch[i+1])) ? t.toUpperCase() : t.charAt(0).toUpperCase()+t.slice(1); }).join("").replace(/[^A-Za-z0-9._-]+/g,"_"); };
-async function saveFile(name, blob, desc, ext, mime, onHandle){
+async function saveFile(name, blob, desc, ext, mime){
   if (window.showSaveFilePicker){
     try{ const h = await window.showSaveFilePicker({suggestedName:name, types:[{description:desc, accept:{[mime]:[ext]}}]});
-      const w = await h.createWritable(); await w.write(blob); await w.close(); if (onHandle) await onHandle(h); return h.name; }
+      const w = await h.createWritable(); await w.write(blob); await w.close(); return h.name; }
     catch(err){ if (err && err.name==="AbortError") return false; /* інша помилка — запасний спосіб */ }
   }
   const a = document.createElement("a");
@@ -625,7 +600,7 @@ async function saveJson(){
   const at = Date.now(); S.appVersion = APP_VERSION;
   const prev = S.saveInfo; S.saveInfo = {at, name:fileBase()+".json"};       // позначка потрапляє і у файл
   const name = await saveFile(fileBase()+".json", new Blob([JSON.stringify(S,null,2)],{type:"application/json"}),
-                              "Дані ThinCap 140 (JSON)", ".json", "application/json", putHandle);
+                              "Дані ThinCap 140 (JSON)", ".json", "application/json");
   if (!name){ S.saveInfo = prev; renderSaveState(); return false; }   // скасовано
   S.saveInfo = {at, name}; S.changedAt = at; store(); renderSaveState(); renderOutputs(); return true;
 }
@@ -678,9 +653,9 @@ function periodSection(pid, n){
      <tr><td>Залишок процентів на перенесення на кінець періоду</td><td class="n">${fmt(r.closing)}</td></tr></tbody></table>
    <div><b>Джерела даних / примітка:</b> ${String(p.note).trim()?esc(p.note):"—"}</div>`;
 }
-function printWorkingPaper(mode){
+function printWorkingPaper(){
   const M = model();
-  const pids = mode==="all" ? PERIODS.filter(x=>filled(S.periods[x.id])).map(x=>x.id) : [S.active];
+  const pids = [S.active];
   if (!pids.length || !M.results[pids[0]]){ alert("Період не заповнено: немає що друкувати."); return; }
   const pool = M.pool.map(x=>`<tr><td class="c">${x.year}${x.auto?"*":""}</td><td class="n">${fmt(x.opening)}</td><td class="n">${fmt(x.excess)}</td><td class="n">${fmt(x.used)}</td><td class="n">${fmt(x.closing)}</td><td class="n">${x.control==null?"—":fmt(num(x.control))}</td><td class="n">${x.diff==null?"—":fmt(x.diff)}</td></tr>`).join("");
   const m = S.method;
