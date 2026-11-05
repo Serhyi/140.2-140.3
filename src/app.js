@@ -5,6 +5,9 @@ const PERIODS = [
   {id:"M9", label:"9 місяців"}, {id:"Y",  label:"Рік"}
 ];
 const STORE_KEY = "thincap140.v1";
+const APP_VERSION = "@@VERSION@@";   // підставляє build.py з файлу VERSION
+const verCmp = (a,b) => { const x=String(a).split(".").map(Number), y=String(b).split(".").map(Number);
+  for (let i=0;i<Math.max(x.length,y.length);i++){ const d=(x[i]||0)-(y[i]||0); if (d) return Math.sign(d); } return 0; };
 
 const CATS = {
   other:{label:"Нерезидент (інший)", excl:false},
@@ -44,9 +47,14 @@ function migrate(s){
   delete s.periods; delete s.active;
   s.method = Object.assign(defaultMethod(), s.method||{});
   s.meta = Object.assign({regime:"auto", docNo:"", docDate:""}, s.meta||{});
+  // рік без періодів або без активного періоду; звітний рік — з даних, якщо не вказаний
+  Object.values(s.years).forEach(Y=>{ if (!Y.periods || typeof Y.periods!=="object") Y.periods = {}; });
+  if (!num(s.meta.year)){ const ys = Object.keys(s.years).map(Number).filter(Boolean); s.meta.year = ys.length ? Math.max(...ys) : new Date().getFullYear(); }
   if (s.meta.wpIndex && !s.meta.docNo) s.meta.docNo = s.meta.wpIndex; delete s.meta.wpIndex;
   if (!s.schema){ s.method.includeDecInObject = false; }
   Object.values(s.years).forEach(Y=>{ PERIODS.forEach(pp=>{ if (!Y.periods[pp.id]) Y.periods[pp.id] = emptyPeriod(); }); });
+  Object.values(s.years).forEach(Y=>{ if (!PERIODS.some(pp=>pp.id===Y.active)){
+    const f = PERIODS.filter(pp=>filled(Y.periods[pp.id])); Y.active = f.length ? f[f.length-1].id : "Q1"; } });
   Object.values(s.years).flatMap(Y=>Object.values(Y.periods)).forEach(p=>{
     p.debts = (p.debts||[]).map(d=>Object.assign(emptyDebt(), d));
     if (p.interest!=null){ if (p.debts.length) p.debts[0].interest = num(p.debts[0].interest)+num(p.interest); delete p.interest; }
@@ -81,6 +89,7 @@ const CASE = /*@@CASE@@*/null;
 function exampleState(){
   if (!CASE || !CASE.state) return blankState();
   const st = migrate(JSON.parse(JSON.stringify(CASE.state)));
+  delete st.saveInfo; delete st.changedAt;   // у користувача дані ще не збережені у його власний JSON
   st.caseRev = CASE.rev || 0; return st;
 }
 
@@ -581,9 +590,12 @@ $("#fileLoad").addEventListener("change", async e => {
     // приймаємо нову структуру (years) і стару (periods одного року)
     if (!o || typeof o!=="object" || !o.meta || !(o.years || o.periods))
       throw new Error("це не файл даних ThinCap 140 (немає розділів meta / years)");
+    const fileVer = o.appVersion;
     S = migrate(o); S.saveInfo = {at:Date.now(), name:f.name, loaded:true}; S.changedAt = S.saveInfo.at; store(); renderAll(); renderSaveState();
     const ys = Object.keys(S.years).sort().join(", ");
     document.querySelectorAll(".recalc-msg").forEach(m => m.textContent = `Завантажено «${f.name}»: роки ${ys}.`);
+    if (fileVer && verCmp(fileVer, APP_VERSION) > 0)
+      alert(`Файл збережено новішою версією програми (${fileVer}), а у вас версія ${APP_VERSION}. Дані завантажено, але частина нових можливостей може бути недоступна. Попросіть актуальну версію програми.`);
   }
   catch(err){ alert("Не вдалося завантажити файл: "+err.message); }
   e.target.value="";
@@ -610,7 +622,7 @@ async function saveFile(name, blob, desc, ext, mime, onHandle){
   return a.download;
 }
 async function saveJson(){
-  const at = Date.now();
+  const at = Date.now(); S.appVersion = APP_VERSION;
   const prev = S.saveInfo; S.saveInfo = {at, name:fileBase()+".json"};       // позначка потрапляє і у файл
   const name = await saveFile(fileBase()+".json", new Blob([JSON.stringify(S,null,2)],{type:"application/json"}),
                               "Дані ThinCap 140 (JSON)", ".json", "application/json", putHandle);
@@ -623,7 +635,7 @@ function exportXlsx(){
   const meta = [["Платник",S.meta.payer],["ЄДРПОУ",S.meta.edrpou],["Звітний рік",S.meta.year],["Категорія",S.meta.kind==="fin"?"фінустанова/лізинг — п. 140.2 не застосовується":"загальна, поріг 3,5"],
     ["Ліміт",S.method.cap],["Щорічне зменшення",S.method.haircut],["3.2.1 в ООПП",S.method.includeDecInObject?"так":"ні"],
     ["Зменшення при невиконаному тесті",S.method.decreaseWhenTestFails?"так":"ні"],["Виконавець",S.meta.preparer],["Головний бухгалтер",S.meta.reviewer],["Довідка №",S.meta.docNo],["Дата довідки",S.meta.docDate],
-    ["Сформовано",new Date().toLocaleString("uk-UA")]];
+    ["Сформовано",new Date().toLocaleString("uk-UA")],["Версія програми",APP_VERSION]];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(meta), "Параметри");
   const pool = [["Рік","Залишок на початок (після −5%)","3.1.1 (+)","3.2.1 (−)","Залишок на кінець","Контроль платника","Розбіжність","Пояснення"]]
     .concat(M.pool.map(x=>[x.year, r2(x.opening), r2(x.excess), r2(x.used), r2(x.closing), x.control==null?"":x.control, x.diff==null?"":r2(x.diff), x.note||""]));
@@ -697,7 +709,7 @@ function printWorkingPaper(mode){
      <div><div class="sig-role">Виконавець</div><div class="sig-line">____________________</div><div class="sig-name">${esc(S.meta.preparer||"(ПІБ)")}</div></div>
      <div><div class="sig-role">Головний бухгалтер</div><div class="sig-line">____________________</div><div class="sig-name">${esc(S.meta.reviewer||"(ПІБ)")}</div></div>
    </div>
-   <div class="small" style="margin-top:8mm">Сформовано ${today} за допомогою програми ThinCap 140.</div>`;
+   <div class="small" style="margin-top:8mm">Сформовано ${today} за допомогою програми ThinCap 140, версія ${APP_VERSION}.</div>`;
   document.body.classList.add("wp");
   const done = () => { document.body.classList.remove("wp"); window.removeEventListener("afterprint", done); };
   window.addEventListener("afterprint", done);
