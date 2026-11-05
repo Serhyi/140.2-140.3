@@ -32,7 +32,7 @@ There is no test suite or linter. Changes are verified by loading the built HTML
 
 **Printing.** `printWorkingPaper()` fills `#printArea` and toggles `body.wp`; `periodSection()` reuses the rendered calculation trace by temporarily switching `S.active`. Print CSS (`@page`, margin boxes for page numbers) lives in `app.html`.
 
-**Files.** `saveFile()` uses `showSaveFilePicker` (Chrome/Edge; keeps the Cyrillic name, the handle is kept in IndexedDB for «Перевірити файл»), otherwise an `application/octet-stream` download with a transliterated name (`latin()`), because Chrome on `file://` pages drops non-Latin download names. Loading accepts the current format, the legacy single-year format and a case wrapper `{state: …}`. A case file's `rev` makes the app offer to replace older data stored in the browser.
+**Files.** `saveFile()` uses `showSaveFilePicker` (Chrome/Edge; keeps the Cyrillic name), otherwise an `application/octet-stream` download with a transliterated name (`latin()`), because Chrome on `file://` pages drops non-Latin download names. Loading accepts the current format, the legacy single-year format and a case wrapper `{state: …}`. A case file's `rev` makes the app offer to replace older data stored in the browser.
 
 **Formatting.** `fmt()` prints NBSP-grouped numbers with negatives in parentheses; `num()` parses spaces, commas and parentheses. Some source strings contain literal U+00A0 — exact-string edits may need to account for it.
 
