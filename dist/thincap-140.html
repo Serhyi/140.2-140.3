@@ -207,7 +207,10 @@ footer.app{border-top:1px solid var(--border);color:var(--muted);font-size:11px;
   body.wp > header, body.wp > .wrap, body.wp > footer{display:none!important}
   body.wp #printArea{display:block}
   body:not(.wp) nav.tabs, body:not(.wp) .toolbar, body:not(.wp) .noprint{display:none!important}
-  body:not(.wp) section.card{border:none;padding:0;margin:8px 0;break-inside:avoid}
+  /* «Друк екрана»: довгі картки можуть розриватися між сторінками; цілими лишаються заголовки з наступним вмістом, рядки, пункти і картки кредиторів */
+  body:not(.wp) section.card{border:none;padding:0;margin:8px 0}
+  body:not(.wp) section.card :is(h2,h3){break-after:avoid}
+  body:not(.wp) section.card :is(tr,li,label.f,.kpi,.debt){break-inside:avoid}
 }
 #printArea{color:#141B26;background:#fff;font:400 10.5pt/1.45 var(--font-sans)}
 #printArea .ent{border-bottom:0.75pt solid #141B26;padding-bottom:3pt;margin-bottom:10mm}
